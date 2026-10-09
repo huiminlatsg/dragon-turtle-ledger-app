@@ -61,6 +61,7 @@ export default async function FamilyPage() {
       <section className="card" aria-label={t("family.books")}>
         <h2>{t("family.books")}</h2>
         <ul className="list">
+          <li><Link href="/recurring" className="row"><span>{t("repeat.title")}</span><span>→</span></Link></li>
           <li><Link href="/templates" className="row"><span>{t("tpl.title")}</span><span>→</span></Link></li>
           <li>
             <Link href="/accounts" className="row" data-testid="family-accounts">

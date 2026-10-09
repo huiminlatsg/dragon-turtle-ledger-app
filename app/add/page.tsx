@@ -89,7 +89,7 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
         />
       )}
 
-      <p><Link href="/templates">{t("tpl.title")}</Link></p>
+      <p><Link href="/templates">{t("tpl.title")}</Link> · <Link href="/recurring">{t("repeat.title")}</Link></p>
       <h2>{t("add.recent")}</h2>
       {recent.length === 0 ? (
         <p className="muted">{t("add.recentEmpty")}</p>
