@@ -5,7 +5,7 @@ merges only when HM replies "merge" (details in CLAUDE.md). Outside pull request
 
 Every change follows the same path, so the live app keeps working:
 
-1. **Backlog item** — what and why, plus "done when" (kept in the owner's private project tracker).
+1. **Backlog item** — what and why, plus "done when" (`pm/backlog-tracker.md`).
 2. **Branch** — `feat/<short-name>` for features, `fix/<short-name>` for fixes. Never commit to `main` directly.
 3. **Pull request** — CI runs unit tests, build, type check, iPhone-sized end-to-end tests,
    database security tests, a secret scan and a privacy guard. Database migrations are applied to **staging**.
@@ -43,5 +43,5 @@ scans every pull request for leaked keys.
 ## This repo is public
 
 Family data, spending history and planning notes never go here. `scripts/privacy-guard.py` runs on every pull
-request and fails on private folders (`design/`, `pm/`), data files (`.csv`), personal email addresses, Supabase
-project addresses and a short hashed list of private words. Supabase project IDs live in GitHub and Vercel settings.
+request and fails on data files (`.csv`, history files), personal email addresses, Supabase project addresses and a
+short hashed list of private words. Project docs in `pm/` and `design/` are cleaned versions. Supabase project IDs live in GitHub and Vercel settings.

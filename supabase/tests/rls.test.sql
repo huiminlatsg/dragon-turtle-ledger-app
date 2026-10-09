@@ -43,7 +43,7 @@ grant all on ids to authenticated, anon;
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
 
-insert into ids select 'hh_alice', public.create_household('Li family', 'Alice')::text;
+insert into ids select 'hh_alice', public.create_household('Test family', 'Alice')::text;
 
 select pg_temp.check((select count(*) from public.categories where parent_id is null and kind = 'expense') = 16,
   'new household gets 16 expense top-level categories');
@@ -110,7 +110,7 @@ insert into ids select 'family_invite_2', public.create_family_invite('Spare');
 
 select pg_temp.check((select count(*) from public.family_invites) = 2, 'admin sees family invites');
 select pg_temp.check((select count(*) from public.admin_overview()) = 1, 'admin overview lists families');
-select pg_temp.check((select member_count from public.admin_overview() where family_name = 'Li family') = 1,
+select pg_temp.check((select member_count from public.admin_overview() where family_name = 'Test family') = 1,
   'admin overview counts members');
 
 -- ---------- Bob, not yet a member, sees nothing --------------------------------

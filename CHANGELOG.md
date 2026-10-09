@@ -228,7 +228,7 @@ All notable changes are listed here, newest first. Versions follow
 ## [0.9.0] — Account nicknames
 
 ### Added
-- An optional **nickname** for every account (for example "DBS_Yuu" for the card officially named "DBS yuu").
+- An optional **nickname** for every account (a short friendly name shown instead of the card's official name).
   Lists and the account page show the nickname first, with the official name underneath; accounts
   without one look as before. Add it when creating an account or later with Edit.
 - Database: `accounts.nickname` (1 to 40 characters, never blank), with tests. No change to who can see what.
