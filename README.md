@@ -11,7 +11,7 @@ Chinese and English UI; sign-in with Google.
 | Pipeline | GitHub Actions → Vercel previews (staging) → production |
 | Live | https://dragon-turtle-ledger.vercel.app (invite only) |
 
-This repo holds the app code only. Family data, history and project planning are kept privately.
+This repo holds the app code and the project docs (`pm/`, `design/`). Family data and history are kept privately.
 
 ## Roadmap
 
@@ -33,6 +33,7 @@ This repo holds the app code only. Family data, history and project planning are
 - [How changes are made](CONTRIBUTING.md) — branches, tests, releases
 - [Runbook](docs/RUNBOOK.md) — rollback and recovery
 - [Changelog](CHANGELOG.md)
+- [Backlog](pm/backlog-tracker.md) · [Requirements](design/rtm.md) · [Category design](design/category-design.md)
 
 ## Layout
 

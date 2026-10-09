@@ -1,7 +1,6 @@
 # Data model
 
-How money is recorded and reported. The full design, with history and decisions, is kept in the owner's
-private project docs.
+How money is recorded and reported. The full design and decisions are in `design/category-design.md`.
 
 ## Transactions
 
