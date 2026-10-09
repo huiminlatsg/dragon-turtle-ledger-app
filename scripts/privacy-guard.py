@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Fails if family data or private details reach this public repo.
 
-The app's family data, spending history and project notes live in a separate private repo. This check
+Family data and spending history live in a separate private archive repo. This check
 runs on every pull request (from CI and from the docs secret scan) and refuses:
-  - private folders and data files: design/, pm/, any .csv, history files;
+  - data files and private documents: any .csv, history files, the full category design
+    (the public docs in pm/ and design/ are cleaned versions);
   - personal email addresses (gmail, outlook and similar);
   - Supabase project addresses (<project id>.supabase.co); project IDs live in GitHub and Vercel settings;
   - a short list of private words. They are stored only as SHA-256 hashes, so this file reveals nothing.
@@ -15,7 +16,7 @@ import re
 import subprocess
 import sys
 
-BLOCKED_PATHS = re.compile(r"^(design/|pm/)|\.csv$|(^|/)history[^/]*$", re.IGNORECASE)
+BLOCKED_PATHS = re.compile(r"\.csv$|(^|/)history[^/]*$|(^|/)expense-category-design\.md$", re.IGNORECASE)
 PERSONAL_EMAIL = re.compile(
     r"[\w.+-]+@(gmail|googlemail|yahoo|hotmail|outlook|live|icloud|me|qq|163|126)\.(com|com\.sg|sg)\b",
     re.IGNORECASE,
@@ -45,7 +46,7 @@ def main():
     problems = []
     for path in tracked_files():
         if BLOCKED_PATHS.search(path):
-            problems.append(f"{path}: private folder or data file; it belongs in the private repo")
+            problems.append(f"{path}: data file or private document; it belongs in the private archive")
             continue
         if path in SKIP:
             continue
