@@ -89,7 +89,12 @@ function money(v: string | undefined): number | null | "bad" {
   return roundCents(Number(s));
 }
 
-const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`));
+/** Reject impossible dates; Date.parse alone normalizes e.g. Feb 30 into March. */
+const isDate = (s: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || s.startsWith("0000-")) return false;
+  const timestamp = Date.parse(`${s}T00:00:00Z`);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === s;
+};
 
 /**
  * Turns form fields into a row, or the list of problems to show.

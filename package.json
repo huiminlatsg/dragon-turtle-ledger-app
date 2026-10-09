@@ -1,6 +1,6 @@
 {
   "name": "expensify",
-  "version": "0.22.0",
+  "version": "0.22.1",
   "private": true,
   "license": "UNLICENSED",
   "description": "Family expense tracker: quick logging on iPhone, card min-spend tracking, category reports.",

@@ -124,3 +124,28 @@ describe("parseRuleForm", () => {
     });
   });
 });
+
+describe("strict calendar dates", () => {
+  it("rejects impossible opening-balance dates rather than rolling them into another month", () => {
+    for (const invalid of ["2026-02-30", "2025-02-29", "2026-04-31", "0000-01-01"]) {
+      expect(parseAccountForm({ type: "bank", name: "Savings", opening_balance_date: invalid })).toEqual({
+        ok: false,
+        errors: ["err.date"],
+      });
+    }
+    const leap = parseAccountForm({ type: "bank", name: "Savings", opening_balance_date: "2024-02-29" });
+    expect(leap.ok && leap.row.opening_balance_date).toBe("2024-02-29");
+  });
+
+  it("rejects impossible minimum-spend rule start and end dates", () => {
+    const card = { statement_day: null };
+    expect(parseRuleForm({ amount: "500", valid_from: "2026-02-30" }, card, "2026-10-08")).toEqual({
+      ok: false,
+      errors: ["err.date"],
+    });
+    expect(parseRuleForm({ amount: "500", valid_from: "2026-10-08", valid_to: "2026-11-31" }, card, "2026-10-08")).toEqual({
+      ok: false,
+      errors: ["err.date"],
+    });
+  });
+});
