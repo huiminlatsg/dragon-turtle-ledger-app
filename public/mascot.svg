@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Dragon Turtle Ledger mascot</title>
+  <rect width="512" height="512" fill="#0f766e"/>
+  <circle cx="256" cy="262" r="196" fill="#14938a"/>
+  <g transform="translate(20 36) scale(0.8)" stroke="#063b36" stroke-width="9" stroke-linejoin="round" stroke-linecap="round">
+    <!-- tail -->
+    <path d="M100 336 Q58 338 48 384 Q84 372 112 356 Z" fill="#6fd6a0"/>
+    <!-- legs -->
+    <rect x="138" y="318" width="76" height="78" rx="30" fill="#6fd6a0"/>
+    <rect x="292" y="318" width="76" height="78" rx="30" fill="#6fd6a0"/>
+    <!-- neck and head -->
+    <path d="M380 344 C380 286 396 252 424 240 L478 292 L440 352 Z" fill="#6fd6a0"/>
+    <circle cx="452" cy="250" r="78" fill="#6fd6a0"/>
+    <ellipse cx="496" cy="272" rx="17" ry="12" fill="#b6f2d0"/>
+    <!-- face -->
+    <circle cx="456" cy="232" r="24" fill="#ffffff"/>
+    <circle cx="463" cy="234" r="13" fill="#063b36" stroke="none"/>
+    <circle cx="468" cy="228" r="5" fill="#ffffff" stroke="none"/>
+    <circle cx="459" cy="240" r="2.5" fill="#ffffff" stroke="none"/>
+    <circle cx="426" cy="276" r="14" fill="#ff9fb0" stroke="none" opacity="0.85"/>
+    <circle cx="499" cy="269" r="2.5" fill="#063b36" stroke="none"/>
+    <path d="M462 290 Q478 304 496 290" fill="none" stroke-width="6"/>
+    <!-- belly strip -->
+    <rect x="92" y="316" width="334" height="38" rx="19" fill="#fff0b8"/>
+    <!-- shell -->
+    <path d="M96 334 C96 214 176 140 262 140 C348 140 424 214 424 334 Z" fill="#f6b93b" stroke="#6b4300"/>
+    <path d="M262 140 L262 182 M150 262 L210 246 M374 262 L314 246 M130 318 L196 292 M394 318 L328 292" fill="none" stroke="#6b4300" stroke-width="7"/>
+    <!-- coin on the shell -->
+    <circle cx="262" cy="244" r="56" fill="#ffe27a" stroke="#6b4300" stroke-width="8"/>
+    <rect x="240" y="222" width="44" height="44" fill="#f6b93b" stroke="#6b4300" stroke-width="7"/>
+  </g>
+</svg>

@@ -1,0 +1,43 @@
+# Manual repair: regenerates package-lock.json on a branch and commits it back.
+# Run by hand only, when a dependency change was made somewhere npm can't run:
+#   gh api -X POST repos/huiminlatsg/dragon-turtle-ledger/actions/workflows/lockfile.yml/dispatches -f ref=<branch>
+#
+# Normally the lockfile is committed together with the package.json change (B-29).
+# A version bump needs no npm: edit the two "version" fields at the top of
+# package-lock.json to match package.json. CI's `npm ci` fails if the two files
+# disagree, so an out-of-step lockfile is caught there.
+#
+# The commit this makes uses the workflow token, which doesn't start CI. After it,
+# run CI on the branch by hand (actions/workflows/ci.yml/dispatches -f ref=<branch>)
+# so the commit that gets merged is the one that was tested.
+name: Lockfile repair
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Resolve dependencies
+        run: npm install --package-lock-only --no-audit --no-fund
+      - name: Commit lockfile if it changed
+        run: |
+          if git diff --quiet -- package-lock.json && git ls-files --error-unmatch package-lock.json >/dev/null 2>&1; then
+            echo "Lockfile already up to date."; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "Update package-lock.json"
+          git push
+          echo "::notice::Lockfile committed. This commit doesn't start CI; run CI on this branch by hand."

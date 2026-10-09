@@ -1,0 +1,19 @@
+# Supabase settings kept as code. Pushed by .github/workflows/supabase-config.yml:
+# staging when a pull request changes this file, production on merge.
+# Only settings that differ from Supabase's defaults need to be here.
+# Google's client ID and secret come from GitHub secrets; the workflow adds them at push time.
+
+project_id = "expensify"
+
+[auth]
+enabled = true
+site_url = "https://dragon-turtle-ledger.vercel.app"
+# Where Google sign-in may return to: production, Vercel previews (staging), local development.
+additional_redirect_urls = ["https://dragon-turtle-ledger.vercel.app/**", "https://expensify-pi.vercel.app/**", "https://*.vercel.app/**", "http://localhost:3000/**"]
+enable_signup = true
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+
+# Sign-in is with Google only.
+[auth.email]
+enable_signup = false

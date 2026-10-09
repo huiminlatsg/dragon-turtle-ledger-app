@@ -1,0 +1,40 @@
+# After Vercel finishes a PRODUCTION deployment, run the end-to-end tests and
+# the health check against the live site. Fails loudly if a deploy is broken.
+#
+# Preview deployments are not tested here: CI already tested the same commit,
+# and previews sit behind Vercel's login. Filtering at the job level means
+# preview events cost no Actions minutes (a skipped job isn't billed). B-29.
+name: Deployment check
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Production is tested on its public domain; each deployment's own URL sits behind Vercel's login.
+      BASE_URL: https://dragon-turtle-ledger.vercel.app
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.deployment.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+      - run: npx playwright install --with-deps chromium
+      - name: End-to-end tests against ${{ env.BASE_URL }}
+        run: scripts/ci-run.sh "Deployed site tests" npm run test:e2e
+      - name: Production health check
+        if: ${{ !cancelled() }}
+        run: |
+          curl -fsS ${VERCEL_AUTOMATION_BYPASS_SECRET:+-H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET"} \
+            "$BASE_URL/api/health" | tee /dev/stderr | grep -q '"database":"ok"'

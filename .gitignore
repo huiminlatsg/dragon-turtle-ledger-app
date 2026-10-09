@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# tests
+test-results/
+playwright-report/
+coverage/
+
+# env files — secrets never go in git
+.env
+.env.*
+!.env.example
+
+# Supabase local state
+supabase/.branches/
+supabase/.temp/
+
+# backups
+backup/
+*.tgz
+*.gpg
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+
+# Vercel
+.vercel
+
+# Python
+__pycache__/
+*.pyc

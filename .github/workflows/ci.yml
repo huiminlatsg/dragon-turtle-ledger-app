@@ -1,0 +1,149 @@
+# Runs on pull requests (not drafts), and by hand. It does NOT run again on main after a merge: the PR
+# run tested the change against its base, and the production Deployment check covers the live result.
+# Run it by hand on main (workflow_dispatch) only when intervening changes invalidate the PR run's
+# evidence, or after a migration, security change, conflict resolution or authorized direct push.
+# A PR should only be merged when this is green.
+#
+# This repo is public, so standard GitHub-hosted runners cost no Actions minutes. The economies below
+# date from when it was private and are kept because they also keep CI fast:
+#   - One job, not five.
+#   - Docs-only changes (pm/, docs/, any .md) don't run CI at all.
+#   - Draft PRs don't run CI. Mark the PR "ready for review" to run it.
+#   - The two database suites run only when the database side changed
+#     (supabase/, the db test script or this file). Manual runs do everything.
+#   - The secret scan covers only the new commits, not the whole history.
+#     Docs-only changes are scanned by secret-scan.yml instead.
+#   - After a failure, the expensive end-to-end tests are skipped; the other
+#     areas (privacy, secrets, database) still report, since each result
+#     stands on its own and saves a re-push to find the next failure.
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore: ["pm/**", "docs/**", "**/*.md", ".github/dependabot.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI — privacy, secrets, app, database
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Work out what changed
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base=""
+          if [ "$EVENT" = pull_request ]; then base="$PR_BASE"; fi
+          if [ -n "$base" ] && [ "$base" != 0000000000000000000000000000000000000000 ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "range=$base..HEAD" >> "$GITHUB_OUTPUT"
+            if git diff --name-only "$base" HEAD | grep -qE '^(supabase/|scripts/db-test|\.github/workflows/ci\.yml$)'; then db=true; else db=false; fi
+          else
+            echo "range=" >> "$GITHUB_OUTPUT"   # manual run or unknown base: full scan, all suites
+            db=true
+          fi
+          echo "db=$db" >> "$GITHUB_OUTPUT"
+          echo "Database suites: $db" >> "$GITHUB_STEP_SUMMARY"
+
+      # Privacy — no family data or private details in this public repo
+      - name: Privacy guard
+        run: scripts/ci-run.sh "Privacy guard" python3 scripts/privacy-guard.py
+      - name: Python tests (staging migration helper)
+        if: ${{ !cancelled() }}
+        run: scripts/ci-run.sh "Python tests" python3 -m unittest discover -s tests/python -v
+
+      # Secret scan — new commits only (full history on a manual run)
+      - name: Scan for leaked keys and passwords
+        if: ${{ !cancelled() }}
+        env:
+          RANGE: ${{ steps.changes.outputs.range }}
+        run: |
+          scripts/ci-run.sh "Secret scan" docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
+            git /repo --redact --verbose --no-banner ${RANGE:+--log-opts="$RANGE"}
+
+      # App — unit tests, build, types, end-to-end
+      - uses: actions/setup-node@v7
+        if: ${{ !cancelled() }}
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        id: install
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f package-lock.json ]; then scripts/ci-run.sh "Install" npm ci; else scripts/ci-run.sh "Install" npm install --no-audit --no-fund; fi
+
+      - name: Unit tests
+        id: unit
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: scripts/ci-run.sh "Unit tests" npm test
+
+      - name: Type check
+        id: types
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: scripts/ci-run.sh "Type check" npm run typecheck
+
+      - name: Build
+        id: build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: scripts/ci-run.sh "Build" npm run build
+
+      # Only when everything before it passed: a failed unit test, type check or build makes this a waste of minutes.
+      - name: Install browser for end-to-end tests
+        if: ${{ !cancelled() && steps.unit.outcome == 'success' && steps.types.outcome == 'success' && steps.build.outcome == 'success' }}
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests (iPhone-sized)
+        id: e2e
+        if: ${{ !cancelled() && steps.unit.outcome == 'success' && steps.types.outcome == 'success' && steps.build.outcome == 'success' }}
+        run: scripts/ci-run.sh "End-to-end tests" npm run test:e2e
+
+      - name: Keep test report on failure
+        if: ${{ !cancelled() && steps.e2e.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: test-results/
+          retention-days: 7
+
+      # Database — migrations and security rules (only when the database side changed)
+      - name: Database tests (plain Postgres)
+        if: ${{ !cancelled() && steps.changes.outputs.db == 'true' }}
+        run: scripts/ci-run.sh "Database tests" ./scripts/db-test-local.sh
+
+      - name: Install Supabase CLI
+        id: sbcli
+        if: ${{ !cancelled() && steps.changes.outputs.db == 'true' }}
+        run: |
+          npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/sb" supabase@latest
+          echo "$RUNNER_TEMP/sb/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Start local Supabase and apply migrations
+        id: sbstart
+        if: ${{ !cancelled() && steps.sbcli.outcome == 'success' }}
+        run: |
+          [ -f supabase/config.toml ] || echo "n" | supabase init
+          supabase start -x studio,imgproxy,edge-runtime,logflare,vector
+
+      - name: Database tests (real Supabase stack)
+        if: ${{ !cancelled() && steps.sbstart.outcome == 'success' }}
+        run: |
+          DB_URL=$(supabase status -o env | sed -n 's/^DB_URL="\(.*\)"$/\1/p')
+          # Only warnings and errors reach the failure annotation (the "ok" lines would crowd out the reason).
+          PGOPTIONS="-c client_min_messages=warning" scripts/ci-run.sh "Supabase database tests" psql "$DB_URL" -q -v ON_ERROR_STOP=1 -o /dev/null -f supabase/tests/rls.test.sql

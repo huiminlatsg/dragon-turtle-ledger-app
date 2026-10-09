@@ -1,0 +1,28 @@
+# Monthly pull requests for dependency updates; each one runs through CI.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    # Monthly, and no automatic rebasing: each rebase re-runs CI, and one grouped PR was
+    # rebased 30+ times in a week as main moved (B-29). Before merging a stale one, comment
+    # "@dependabot rebase" on it.
+    schedule:
+      interval: monthly
+      timezone: Asia/Singapore
+    rebase-strategy: disabled
+    open-pull-requests-limit: 5
+    # Major upgrades (e.g. Next.js 15 → 16) can break things; Claude does those as planned work.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    rebase-strategy: disabled
+    groups:
+      actions:
+        patterns: ["*"]
