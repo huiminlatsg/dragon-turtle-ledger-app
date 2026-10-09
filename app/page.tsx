@@ -46,7 +46,7 @@ export default async function Home() {
       <Link href="/records" className="secondary button-link" data-testid="all-records">
         {t("rec.title")}
       </Link>
-      <p className="muted">{t("home.next")}</p>
+      <Link href="/recurring" className="secondary button-link">{t("repeat.title")}</Link>
       <StatusCard t={t} />
     </main>
   );

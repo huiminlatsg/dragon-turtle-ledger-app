@@ -5,6 +5,10 @@ All notable changes are listed here, newest first. Versions follow
 
 ## [Unreleased]
 
+## 0.22.0 — 2026-10-09
+
+- Monthly/yearly recurring expenses with amount, first/last dates or no end, account/category/merchant/notes and immutable future-effective revisions. Planned bills are separate from spending; confirm due bills with actual amounts/notes or skip, with atomic replay protection.
+
 ## 0.21.0 — 2026-10-07
 
 - Family-scoped merchant/account expense templates, optional category, management under Family and selection on Add. Explicit merchant templates override usage suggestions; manual choices are preserved.
