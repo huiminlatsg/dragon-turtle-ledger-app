@@ -953,4 +953,10 @@ select pg_temp.expect_error('select * from public.recurring_versions','anon cann
 select pg_temp.expect_error('select * from public.recurring_plan()','anon cannot execute plan RPC');
 reset role;
 
+-- The category seeder runs with database-owner rights inside create_household only.
+select pg_temp.check(
+  not has_function_privilege('anon', 'public.seed_default_categories(uuid)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.seed_default_categories(uuid)', 'EXECUTE'),
+  'privileged category seeder cannot be called directly by anon or authenticated clients');
+
 rollback;

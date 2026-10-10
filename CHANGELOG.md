@@ -5,6 +5,11 @@ All notable changes are listed here, newest first. Versions follow
 
 ## [Unreleased]
 
+## 0.22.1 — 2026-10-09
+
+- Security: the default-category seeder can no longer be called directly by signed-in or anonymous clients; only new-family creation runs it.
+- Account and card-rule dates must be real calendar dates (2026-02-30 is refused instead of rolling into March).
+
 ## 0.22.0 — 2026-10-09
 
 - Monthly/yearly recurring expenses with amount, first/last dates or no end, account/category/merchant/notes and immutable future-effective revisions. Planned bills are separate from spending; confirm due bills with actual amounts/notes or skip, with atomic replay protection.
