@@ -1,7 +1,8 @@
 # Transaction import with review (B-10, RTM D4)
 
 Status: **proposed design, not built**. Requested by HM on 2026-10-18; revised by Claude, then by ChatGPT
-following PR review, then by Claude in the next review round. Implementation, priority and product choices below still require HM's decision.
+following PR review, then by Claude in later review rounds. Implementation, priority and product choices below
+still require HM's decision.
 All examples are invented. Private samples, their extracted rows and totals never enter this repository or PR.
 
 ## 0. Recommended approach (for HM's review)
@@ -106,8 +107,11 @@ Unknown fields are null; they are not zero or an invented date. Example:
   or min/max row dates are not that evidence. AI output alone cannot upgrade completeness without backend
   validation of a known export format or HM's explicit confirmation in the app.
 - **Known complete layouts.** A CSV layout becomes `complete_export` only after HM has accepted it once, on a real
-  download, as "contains every transaction between its first and last row" (a flag on that layout's parser,
-  recorded with who accepted it and when). For such a layout the backend sets coverage to the days strictly
+  download, as "contains every transaction between its first and last row". The acceptance is a database row per
+  family, account and layout (who accepted it, when, parser version), not a client-side flag: `stage_import()`
+  ignores a submitted `complete_export` unless the batch came from the server-side known-layout parser and a
+  matching acceptance exists. A parser version change needs a new acceptance. For such a layout the backend sets
+  coverage to the days strictly
   inside the observed range, on the layout's date basis; the first and last day stay partial. This is the only
   way min/max row dates contribute to coverage, and it is what the automatic attach in §4 relies on.
 
@@ -150,6 +154,9 @@ Matching sequence:
      If the earlier export has *k* such observations and the new one *n*, `min(k, n)` attach to the existing
      events and `n − k` (if positive) become new events. No choice is involved, so no review is needed; the
      attached rows appear under Done with undo.
+   - If the newer export has **fewer** (`n < k`), the missing `k − n` are a bank-side change (reversal or
+     correction), not a duplicate: nothing is deleted or unlinked, and the affected events go to Needs you as
+     *missing from newer export*.
    - Any difference in status, wording, dates or amount, any partial day and any screenshot or AI-extracted row
      falls back to proposed matches.
 6. Ambiguous observations stay in Needs you. HM selects Same transaction, Separate transaction, or Later.
@@ -311,7 +318,8 @@ Acceptance cases must use invented fixtures in GitHub; private sample validation
 2. Same request/file retry, changed payload with reused key, full 1–10 / 5–15 overlap, different row ordering,
    two/three equal purchases and a cropped screenshot showing only one equal purchase: preserve ambiguity/counts.
    Complete-export overlap: interior-day identical settled rows attach automatically with `min(k, n)` and
-   `n − k` new; boundary days, status changes and screenshots stay proposed.
+   `n − k` new; `n < k` flags *missing from newer export* without deleting; boundary days, status changes and
+   screenshots stay proposed; a client-claimed `complete_export` without a stored acceptance is ignored.
 3. Screenshot overlap, clipped date header, unknown date basis/account, truncated or unreadable amount/currency:
    keep observations, block unresolved posting and bulk approval, require explicit same-event decisions.
 4. Pending to settled with changed merchant/reference/date/amount, long posting delay and abandoned authorization:
