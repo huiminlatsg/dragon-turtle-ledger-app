@@ -1,231 +1,312 @@
 # Transaction import with review (B-10, RTM D4)
 
-Status: **proposed design**, not built. Requested by HM on 2026-10-18, revised the same day for the import agent,
-then with Claude's recommended approach (§0). Decisions for HM are listed at the end. All examples here are invented.
+Status: **proposed design, not built**. Requested by HM on 2026-10-18; revised by Claude, then by ChatGPT
+following PR review. Implementation, priority and product choices below still require HM's decision.
+All examples are invented. Private samples, their extracted rows and totals never enter this repository or PR.
 
-## 0. Recommended approach (Claude, 2026-10-18; for HM's review)
+## 0. Recommended approach (for HM's review)
 
-| # | Question | Recommendation | Why |
-|---|---|---|---|
-| 1 | Who reads the files | **App parses known card/bank CSV layouts itself (no AI). AI agent reads screenshots and any new layout** | CSV is the most common input and is fully structured: a fixed parser is exact, free and instant, and removes AI misreads from the bulk of the data. Screenshots really need vision, so that is where the agent earns its place |
-| 2 | Agent home | **Claude, in a separate Project "Ledger Import"**; instructions written to work unchanged as a ChatGPT GPT if ever needed | Claude already runs this project and reads images well; a separate Project keeps bank data out of the development Project and its context. Generic instructions and schema live in `docs/import-agent.md` (no data); HM's samples stay only in that private Project |
-| 3 | How the agent's output reaches the app | **Copy and paste into the app's Import page** (file upload also accepted); no connector yet | On iPhone, "copy" in the chat and "paste" in the app is two taps, easier than saving a file. No OAuth, no keys, works with any AI. A connector (option B) is revisited only if pasting becomes the bottleneck |
-| 4 | Where approval happens | **Always in the app** | Signed-in, RLS applies, disputes persist, and the same validation as manual entry runs. The agent never writes to the database |
-| 5 | Duplicate identity | **Fingerprint in §4** (account, date, amount, merchant key, occurrence), enforced in the database, stored on the confirmed record in `transactions.dedupe_key` | Survives overlapping uploads, pending → settled and truncated screenshot text; the unique index makes double-posting impossible |
-| 6 | Pending lines | **Shown under Waiting, not confirmed by default**; can be confirmed early | Pending amounts change (holds, tips, transit fares added up); waiting avoids rework. Confirming early still works: the settled line then links to it, and any amount change comes back for review |
-| 7 | Manual entry | **Two-way reconciliation (model 3, §6)** | Keeps quick entry with full detail on iPhone, and the bank download catches missed spend, typos and unknown charges |
-| 8 | Matching window | **Auto-link only on exact amount, ±3 days and a single candidate; suggest (never auto-link) up to ±7 days; foreign-currency spend: suggest within 3% of the SGD amount** | Auto-links must be near-certain; wider windows only produce suggestions for HM to tap |
-| 9 | Files | **Keep only the parsed lines; do not store uploads** | Nothing extra to secure, no storage bucket needed (B-08 not a dependency) |
-| 10 | Priority | **Raise B-10 to P1; build after the B-28 stabilisation gate and B-04, and before B-05** | It improves data correctness and daily use, and the October back-fill (B-05) can then be done by importing that month's downloads and screenshots instead of re-typing them |
-
-Build in three PRs, each reviewed and merged separately (§9). Nothing is built until HM approves this design.
-
-## 1. Goal
-
-HM uploads a card or bank CSV download, or screenshots of the banking app. An AI agent (Claude or ChatGPT) reads
-them into one standard format. The app then:
-
-1. drops lines it has already seen (overlapping downloads are normal),
-2. links lines that are already recorded (typed by hand, from a recurring bill, or confirmed earlier),
-3. shows only what is genuinely new on an approval screen,
-4. writes confirmed lines straight into the transactions table, and keeps disputed lines on a list until resolved.
-
-Family transaction data never goes through GitHub. It moves only between HM, the AI chat, the app and the database.
-The public repo holds code, schema and invented test data only; HM's sample files live in the private AI project.
-
-## 2. Architecture
-
-```
- CSV / screenshots ──► Import agent (Claude Project or ChatGPT GPT) ──► standard import file (JSON)
-                                                                              │
-                                     iPhone: Import page in the app ◄─────────┘  (upload, or connector later)
-                                              │
-                         database function stage_import(): fingerprint, dedupe, match
-                                              │
-                         Review screen ──► Confirm ──► transactions (source = 'statement')
-                                       └─► Dispute ──► dispute list ──► resolve later ──► transactions
-```
-
-The work is split on purpose:
-
-| Step | Who | Why |
+| Question | Recommendation | Reason |
 |---|---|---|
-| Read CSV / screenshots, normalise into the import format | AI agent | Formats vary and screenshots need vision; this is what the AI is good at |
-| Unique IDs, dedupe, matching with existing records | Database (`stage_import`) | Must be deterministic and repeatable; an AI must not decide what is a duplicate |
-| Approve, dispute, choose category | HM in the app | Signed in, family rules (RLS) apply, works on iPhone, disputes persist |
-| Write to transactions | App, as HM | Same validation and triggers as manual entry; nothing bypasses RLS |
+| Who reads files | App parses known CSV layouts from the first release; AI reads screenshots and unknown layouts | Deterministic parsing avoids transcription errors for structured inputs |
+| Agent home | Separate private Ledger Import project in Claude, or a ChatGPT agent with the same extraction contract | Samples teach layouts; keep financial inputs separate from development context. Validate each platform's setup separately |
+| Handoff | Paste or upload standard JSON into the signed-in app; connector later | The first release needs no agent database credentials |
+| Approval | HM approves in the app; unresolved required fields block approval | Review is durable and uses family permissions |
+| Identity | Stable bank-event IDs plus source observations; fingerprints find candidates | A hash cannot manufacture a bank transaction ID when the source supplies none |
+| Pending | Waiting by default; explicit early confirmation allowed after validation | Settlement can change dates, descriptions and amounts |
+| Manual entry | Two-way reconciliation, with HM-confirmed matches in the first release | Preserve manual detail and catch missed or mistyped records |
+| Matching | Account, currency, direction, merchant compatibility, amount and dates; resolve competing candidates across the batch | One equal-amount candidate is insufficient proof |
+| File retention | No server-side original uploads initially; retain redacted parsed observations and provenance | Enables review without adding a storage dependency; later original-file retention is a separate choice |
+| Priority | Recommend P1 after B-28 and B-04, before B-05; **not yet accepted** | Import could reduce back-fill effort; existing priority remains unchanged |
 
-### 2a. The agent (Claude or ChatGPT; same design for both)
+Build in separate PRs (§9). This documentation PR does not implement importing or authorize a production import.
 
-- **Claude:** a Project (or a Skill, so it works in any chat) with instructions, the output schema and HM's sample
-  CSVs and screenshots as knowledge. **ChatGPT:** a custom GPT with the same instructions, schema and knowledge files.
-- HM's examples teach it each bank's layout: columns, date formats, pending vs settled, credits, card name in the header,
-  and the screenshot quirks (date headers off-screen, truncated descriptions, overlaps between screenshots).
-- It returns **one JSON file per account** in the format below, plus a short check: line count, total, date range and
-  anything it was unsure of (each such line carries `confidence: "low"` and a note).
-- It never guesses an account: if the card cannot be identified from the file, it asks.
-- Known CSV layouts can later be parsed by the app itself without AI (the same output format), so the agent is
-  needed only for screenshots and new layouts.
+## 1. Goal and responsibilities
 
-### 2b. Getting the file into the app (decision 1)
+HM uploads card/bank CSVs or screenshots, reviews missing or uncertain fields, checks possible duplicates and
+existing manual records, and confirms or disputes each new transaction. Approved records go directly from the
+app to the database, never through GitHub. Disputes persist for later resolution.
 
-| Option | How | Pros | Cons |
-|---|---|---|---|
-| **A. Paste or upload (recommended)** | HM copies the agent's JSON and pastes it on the app's Import page (or uploads it as a file) | No new login or keys; works with Claude and ChatGPT alike; app does all checks | One copy and paste |
-| B. Connector (later) | The app exposes a small MCP endpoint; the agent calls `list_accounts`, `stage_import`, `review_queue`, `list_disputes` | Agent stages directly and can answer "what's still disputed?" | Needs OAuth sign-in for the connector (both Claude and ChatGPT connectors expect it); more to build and secure |
-| Not recommended: direct database access (e.g. a generic Supabase connector) | Agent writes SQL | None worth the risk | Bypasses RLS and app validation; a wrong query can damage production data |
+| Component | Responsibility |
+|---|---|
+| CSV parser / AI agent | Extract every source observation without deciding duplicates; identify uncertainty and provenance |
+| Backend staging | Validate, record observations, detect repeat submissions, propose event/manual matches |
+| HM in the app | Confirm account, correct fields, choose matches/category/ledger, approve or dispute |
+| Backend approval | Atomically create or link a transaction and record the decision; enforce permissions and retry safety |
 
-With either A or B, **approval always happens in the app**, never by the agent alone.
+Known CSV parsers must locate the actual header after metadata, handle quoting/BOM and debit/credit columns,
+read status and both dates, and exclude balances/limits/header metadata from transactions. Unknown or conflicting
+layouts fail visibly instead of silently guessing. Restrict file size, row count, JSON depth and field lengths.
+Treat descriptions and notes as untrusted text, never instructions or executable content.
 
-## 3. Import format (v1)
+## 2. Agent and app handoff
+
+Generic agent instructions and the extraction contract are in `docs/import-agent.md`. HM's private sample files
+stay in the private agent environment. They demonstrate a layout, not a source of dates/accounts for later uploads.
+
+First release: known CSV directly to the app, or AI JSON pasted/uploaded to Import. The app always asks HM to
+confirm the destination account; an account hint is display evidence, never an authorization or database ID.
+Mixed accounts must be separated. Missing account identity can be resolved in the app without inventing it.
+
+Later: a connector may expose scoped `list_accounts`, `stage_import`, `review_queue` and `list_disputes` tools
+with user authentication and family authorization. Approval remains in the app. Generic privileged SQL access
+is not recommended: service-role/owner credentials can bypass RLS; normal authorized access need not bypass it.
+Never give the agent privileged database credentials. Verify platform connector/auth requirements when building.
+
+## 3. Extraction contract (proposed v1)
+
+This is a proposal, not an implemented API. The app must enforce a shared machine-readable schema before release.
+Use decimal strings for money, validate currency precision, and never use floating-point values for identity.
+Unknown fields are null; they are not zero or an invented date. Example:
 
 ```json
 {
   "format": "dtl-import/1",
-  "account_hint": "VISA ...1234",
-  "source": "csv | screenshot | pdf",
-  "period": { "from": "2026-01-01", "to": "2026-01-10" },
+  "account_hint": "Example card",
+  "source": "screenshot",
+  "observed_range": { "from": "2026-01-03", "to": "2026-01-03" },
+  "coverage": { "kind": "partial", "from": null, "to": null, "date_basis": "unknown", "evidence": null },
   "lines": [
     {
+      "source_locator": { "document": 1, "row": 1 },
       "txn_date": "2026-01-03",
-      "posting_date": "2026-01-05",
-      "description": "EXAMPLE CAFE 12345 SINGAPORE SG",
-      "amount": -12.30,
+      "posting_date": null,
+      "display_date": "2026-01-03",
+      "date_basis": "transaction",
+      "description": "EXAMPLE CAFE…",
+      "description_truncated": true,
+      "amount": "-18.25",
       "currency": "SGD",
       "foreign_amount": null,
       "foreign_currency": null,
-      "pending": false,
+      "bank_status": "unknown",
       "bank_ref": null,
+      "reference_kind": null,
       "confidence": "high",
+      "uncertain_fields": [],
       "note": null
     }
   ]
 }
 ```
 
-Charges are negative, credits positive. `account_hint` holds at most the last four digits; full card numbers are
-never stored. `period` is the date range the download covers (used in §6). Screenshots have no period unless HM
-states it; the agent uses the earliest and latest dates it read.
+- `source`: `csv`, `screenshot` or `pdf`. Amount: outflow negative, inflow positive; foreign amount is a positive
+  informational value paired with its currency. No rounding. Unreadable amount/currency may be null in staging.
+- `source_locator`: document ordinal and physical CSV row / screenshot transaction row / PDF page and row.
+  Do not persist original filenames, full account numbers or unrelated metadata. References must be checked for sensitive identifiers.
+- `date_basis`: `transaction`, `posting` or `unknown`. A screenshot date header is not automatically a transaction
+  date unless its layout is known. `display_date` preserves what is visible. Unknown transaction date stays null.
+- `bank_status`: `pending`, `settled` or `unknown`; absence of a Pending label is settled only for a verified layout.
+- `bank_ref` is evidence. Only an issuer-defined stable transaction reference qualifies as strong identity;
+  merchant/bill fragments and changing authorization references do not automatically qualify.
+- Preserve truncation and all observed rows, including screenshot overlaps. The backend proposes overlap matches.
+- `observed_range` is the min/max of known extracted dates, with nullable boundaries; it proves no completeness.
+- `coverage.kind`: `partial`, `complete_export` or `user_confirmed`. Complete coverage requires an explicit
+  account, interval, transaction/posting date basis and evidence that all rows were included. An "as at" date
+  or min/max row dates are not that evidence. AI output alone cannot upgrade completeness without backend
+  validation of a known export format or HM's explicit confirmation in the app.
 
-## 4. Unique identity of a bank line (overlapping uploads)
+## 4. Identity and overlapping uploads
 
-Bank CSVs and screenshots carry no transaction ID, and the same purchase looks slightly different across sources:
-a pending line has no reference number, the settled line gains one, and screenshots truncate descriptions. So the
-identity is built only from what stays stable.
+Separate submission identity, source observations and underlying bank events. Missing bank identifiers make
+some cases intrinsically ambiguous: preserve the observations and ask HM instead of promising perfect dedupe.
 
-**Merchant key:** the description in upper case, digits and punctuation removed, first 12 letters.
-`EXAMPLE CAFE 12345 SINGAPORE SG` and a screenshot's `EXAMPLE CAFE SING...` both give `EXAMPLECAFES`.
-
-**Base key:** `account · transaction date · amount in cents · merchant key`.
-
-**Occurrence number:** two genuinely identical lines (two equal bus fares on one day) share a base key, so each gets
-an occurrence number within its upload: `#1`, `#2`.
-
-**Fingerprint:** hash of `base key · occurrence`. Unique per account in `import_lines`.
-
-How this handles HM's example (upload 1 covers 1–10 Jan, upload 2 covers 5–15 Jan):
-
-- Lines from 5–10 Jan produce the same fingerprints in both uploads → marked *seen before*, not shown again.
-- If upload 2 holds three identical fares on 7 Jan and upload 1 held two, only `#3` is new.
-- 11–15 Jan lines are new and go to matching.
-
-Edge cases:
-
-| Case | Rule |
+| Entity / key | Meaning and constraints |
 |---|---|
-| Pending in upload 1, settled in upload 2 | Same base key → the settled line replaces the pending one (state `superseded`); a confirmed record stays linked |
-| Settled amount differs from pending (hotel hold, tips, transit fares added up) | Same account and merchant key, date ±1 day, different amount → shown as *amount changed*, HM accepts the new amount |
-| Settled date differs by a day | Looked up within ±1 day before treating it as new |
-| Screenshot cut too short to give 12 letters | Shorter key used, and the line goes to review rather than being skipped automatically |
-| A bank reference number exists (some PDFs) | Used as the identity instead of the fingerprint |
+| Import batch ID | Backend UUID; family, confirmed account, uploader and source type |
+| Submission idempotency key | Family/account-scoped request key plus payload digest; retry returns the same batch, changed payload under the same key is rejected |
+| Observation ID | Backend UUID for each physical row, unique `(batch_id, document_ordinal, row_locator)`; never derived solely from purchase content |
+| Bank event ID | Stable backend UUID for the underlying bank charge/credit across observations and settlement |
+| Strong source key | Unique issuer/account/reference namespace for a validated stable bank transaction reference; conflicting reuse goes to review |
+| Candidate fingerprint | Versioned normalized features used for lookup, **not a unique identity constraint** |
+| Posting guard | Stable event-based `transactions.dedupe_key`, namespaced as `import-event:<UUID>`, plus atomic event-to-transaction linking |
 
-Known CSV layouts are parsed by the app into the same format, so the rules below apply whatever the source.
+The backend recomputes keys; never trust an agent-supplied fingerprint, household ID or transaction link.
+Do not strip reference digits from raw evidence or equate merchants by an arbitrary prefix. Merchant aliases
+may help find candidates, but raw and normalized descriptions, truncation and parser versions remain available.
 
-The confirmed transaction stores the fingerprint in its existing `transactions.dedupe_key` (already unique per
-family), so a line can never be posted twice, even if staging is bypassed.
+Matching sequence:
 
-## 5. Data
+1. Retry of the same staging request returns existing observations and decisions without resetting disputes.
+2. Exact replay of a known original file (digest computed before metadata is discarded), or of the same canonical
+   extracted payload for the same account, can return the existing batch; it is not a new import. Separately
+   chosen identical files require explicit "new observation" handling if HM says they represent another event.
+3. Valid stable bank references can attach observations to an existing event without creating a transaction.
+   Same-reference material conflicts require review; a later reference becomes an alias, not a replacement ID.
+4. Without a strong reference, compare account, currency, direction, merchant evidence, dates, amount and known
+   status transitions. Resolve candidate competition across the whole batch, not independently per row.
+5. Across overlapping **complete** exports, compare multiplicities within fully covered days and suggest the
+   overlapping events. Preserve equal repeated purchases. Local occurrence numbers help display counts only;
+   they are never stable identifiers across uploads. Partial/cropped screenshots require explicit overlap review.
+6. Ambiguous observations stay in Needs you. HM selects Same transaction, Separate transaction, or Later.
+   Every observation remains traceable even when it is the same event as another observation.
 
-Builds on columns that already exist on `transactions` (`merchant_raw`, `source` including `'statement'`,
-`status` pending/confirmed/posted, `dedupe_key` with a unique index) and the existing `statements` /
-`statement_lines` for full statements.
+For uploads covering 1–10 Jan and 5–15 Jan, 5–10 Jan is a reconciliation interval, not an instruction to drop
+all matching hashes. Strong IDs permit definite event reuse; otherwise present proposed overlap matches and
+preserve count differences. A cropped image containing the second of two identical purchases must not silently
+be treated as the first purchase.
 
-- `import_batches`: family, account, source, uploaded by, uploaded at, period from/to, line count, total.
-- `import_lines`: family, batch, account, txn date, posting date, description, merchant key, amount, currency,
-  foreign amount/currency, pending, fingerprint, state, linked `transaction_id`, dispute reason and note,
-  resolved at/by.
-- States: `new` · `seen_before` · `matched` (linked to an existing record) · `confirmed` (record created) ·
-  `not_spend` (card payment, payment in) · `disputed` · `superseded` (pending replaced by settled) · `dropped`.
-- One transaction links to at most one import line per account.
-- RLS with `is_member()` / `can_write()`, no `anon` access, tests in `rls.test.sql` with invented data.
-- `stage_import(batch json)` is a database function: it computes keys, inserts only new fingerprints, runs matching
-  (§6) and returns counts per state. Running it twice on the same file changes nothing.
+Pending-to-settled observations attach to the same event only on adequate identity evidence or HM's confirmation.
+Changed merchant wording, amount, dates or added references never create a new event automatically just because
+its old fingerprint changed. Date windows find suggestions, not proof; defaults in §6 are configurable and wider
+posting delays remain reviewable. Combined transit charges, split settlements and partial captures require manual
+resolution in v1. Stale pending observations remain visible; disappearance alone does not prove cancellation.
 
-## 6. Fit with manual entry
+## 5. Data, permissions and atomic operations
 
-Manual entry stays the quick way to record spend on the go (with category, people, ledger, notes). Import becomes
-the **check that nothing was missed or mistyped**. Three possible models:
+Proposed new tables: `import_batches`, `import_observations`, `bank_events`, `bank_event_references`,
+`import_decisions`. Names are provisional until implementation review. Existing `statements` / `statement_lines`
+remain for full-statement reconciliation; do not create a second independent posting path for the same bank events.
 
-| Model | How it works | Verdict |
-|---|---|---|
-| 1. Import only fills gaps | Matching links to manual records; unmatched bank lines go to review | Simple, but a mistyped manual amount is never noticed |
-| 2. Import replaces manual entry | Stop typing; everything comes from the bank | Loses category detail at the moment of spend; cash isn't covered; bank lines lag by days |
-| **3. Two-way reconciliation (proposed)** | Manual records and bank lines check each other | Catches missed spend, typos and charges HM didn't make |
+- Batch: family/account, request key/digest, parser/schema version, source, uploader/time, observed range,
+  coverage evidence, separate debit/credit/status totals and observation count.
+- Observation: family/batch/account, source locator, extracted fields, raw redacted evidence, uncertainty,
+  truncation, candidate features, event link and provenance of any HM corrections.
+- Event: family/account, stable ID, accepted bank fields, version, linked transaction, and reference aliases.
+  Many observations may describe one event. A normal purchase event links to at most one transaction; prevent
+  independent purchase events claiming the same record. A transfer can have observations from both account sides
+  under explicit transfer reconciliation. Split/aggregate mappings need a later explicit allocation model.
+- Keep separate `bank_status` (pending/settled/unknown), `review_status`
+  (needs_review/approved/disputed/ignored) and `match_status` (unmatched/suggested/linked).
+  Waiting is a UI grouping, not a mutually exclusive replacement for disputed or linked.
+- Decisions: actor/time, action/reason, before/after fields, source/event/transaction links and version. Keep an
+  audit trail for corrections, unlinking, ignored observations and dispute resolution; never silently erase history.
+- Tables use family-scoped RLS with `is_member()` / `can_write()`, explicit grants, no anon access. Composite
+  family/account/link foreign keys prevent cross-family links. Viewers cannot stage, approve, dispute or resolve.
+  Functions must enforce actor/family and workflow state; use invoker rights where possible and review any
+  privileged function's search path, grants and authorization. Do not allow raw client writes to bypass decisions.
+- `stage_import()` validates and records observations and suggestions; it creates no financial transactions.
+- Confirm/link/dispute/resolve functions lock the event and relevant transaction candidates, check the expected
+  version and current state, and atomically persist the transaction/link, decision and queue state. Revalidate
+  candidate eligibility at commit time; stale suggestions cannot create duplicate or incorrect links.
+- Repeated confirmation returns the same transaction; concurrent approval produces one result. A conflicting
+  retry returns a conflict. Failed operations leave no half-created transaction or approved queue row.
+- The event-based unique posting key prevents repeating an approved event; it cannot identify an undiscovered
+  duplicate event. Ambiguous cross-source identity still requires review.
 
-Model 3 in detail:
+### Mapping accepted observations into transactions
 
-- **Bank line → manual record.** Same account, exact amount (small tolerance for foreign currency), date ±3 days,
-  not already linked. One clear candidate links automatically (HM can unlink); several are offered to choose from.
-  The manual record keeps its category and details and gains `status = posted`.
-- **Manual record → bank line.** Once an upload covers a date range for an account (its `period`, settled lines
-  only), manual records on that account in that range with no bank line are flagged *not seen on the bank*: wrong
-  card, wrong amount, or not yet posted. HM fixes or keeps it.
-- **While typing.** When HM adds an expense that matches an unlinked bank line, the Add screen shows it and links
-  instead of creating a second record.
-- **Recurring bills (B-07)** are matched like manual records.
-- **Category for new bank lines** comes from merchant templates (B-22), then the last category used for that
-  merchant key, then the account's usage defaults (B-27). HM can change it before confirming.
-- **Coverage view.** Per account, the dates covered by uploads so far, so gaps between downloads are visible.
+Reuse manual-entry validation and existing triggers. Import sign is a bank-flow convention, not the stored sign.
+The current app uses positive amounts with `kind` and category determining expense/income/transfer.
+
+| Approved bank observation | Transaction mapping |
+|---|---|
+| Purchase / fee | `kind=expense`, positive amount; validated expense category and ledger |
+| Refund / waiver | `kind=income`, positive amount; correct offset category and optional recovery link |
+| Card repayment / own-account transfer | `kind=transfer`, positive amount with source/destination accounts; link existing transfer if present |
+| Unclassified credit | Remains Needs you until HM distinguishes refund, repayment, income or other credit |
+| Foreign-currency payment | Preserve billed currency/amount and original currency/amount; require ledger-currency amount and SGD amount under existing rules |
+
+Never infer a funding account from a card repayment label. HM supplies it or the line stays unresolved; explicitly
+ignoring a payment is auditable and never records it as income. Reconcile the two bank sides to one transfer.
+For new transactions set `source=statement`, `merchant_raw` from the redacted source, and the stable posting key.
+For existing manual/recurring records preserve ID, source, category, ledger, people, notes and receipts; attach bank
+evidence separately. Updates to financial fields require an explicit reviewed correction and existing lock rules.
+
+Store transaction date and posting date independently in the event, preserve date-only precision, and define a
+consistent Asia/Singapore conversion to `txn_at` without implying a known time. Do not replace an unknown
+transaction date with posting date silently. Report and min-spend date policy must be explicit and tested against
+B-04 before implementation; the existing date convention stays unchanged until an accepted change.
+
+## 6. Manual and recurring entry reconciliation
+
+Recommended model: keep quick manual entry with full detail, then use bank observations to reconcile it.
+Import-only gap filling misses manual typos; replacing manual entry loses immediate detail and cash coverage.
+
+- In v1 **every new manual/recurring match is a suggestion HM confirms**, including a single candidate.
+- Candidate search requires same account, currency and direction, compatible merchant evidence and amount.
+  Search transaction dates within ±3 days, extending to ±7 days as lower-confidence suggestions. Distinguish
+  posting from transaction dates. A 3% foreign-currency amount tolerance is a suggestion only, never an identity rule.
+- Same amount/date without compatible merchant evidence cannot silently mark a manual record posted. All
+  competing observations and manual candidates are shown; one record cannot satisfy two independent purchases.
+- Confirmed settlement links may set `status=posted`; pending matches do not. Any proposed amount/account/date
+  correction shows before/after values and preserves tags, receipts, recoverable amounts and statement locks.
+- Manual entry after import shows existing approved transactions and staged candidates. HM chooses Link existing,
+  Create separate or Later. Do not insert first and link later. The save operation rechecks candidate versions.
+- Match actual B-07 occurrences/confirmed records. A projected future bill is not proof of a bank charge;
+  do not create both an imported expense and a separately confirmed recurring expense for the same event.
+- Split receipts, aggregated charges and transfers with missing counterparts are explicit unresolved cases in v1.
+- Propose categories using B-22 merchant templates, then accepted merchant history, then applicable account
+  defaults. HM confirms category, ledger and required fields. Truncated prefixes must not teach global aliases.
+
+Coverage view distinguishes observed dates from certified coverage. Only validated complete exports or HM-confirmed
+coverage support *not seen on bank* warnings, using the same date basis and a configurable settlement grace period.
+Recent, pending or uncovered manual entries show *not yet reconciled*. No absence warning deletes or alters a record.
+Screenshots with visible endpoints alone never certify intervening days. This check belongs in the third build PR.
 
 ## 7. Review screen (iPhone first)
 
-One batch at a time, three groups:
+- **Needs you:** unknown fields/accounts, new events, proposed overlap/manual matches, changed settlement fields,
+  unclassified credits and ambiguous repeated charges. Show source locator/redacted text, known dates/date basis,
+  description/truncation, amount/currency, uncertainty, category/ledger and side-by-side existing-record candidates.
+- **Waiting:** pending observations (including age); approval still needs all required fields and an explicit
+  early-confirmation action. Pending is a bank status, separate from HM's acceptance.
+- **Disputed:** persistent cross-batch list; duplicates and reuploads attach evidence without reopening or approving.
+- **Done:** approved links/posts and explicitly ignored observations, with decision history and controlled undo.
 
-1. **Needs you:** new lines, suggested matches, amount changes. Each shows date, description, amount, proposed
-   category and ledger. Actions: **Confirm**, **It's this record** (link), **Not spend**, **Dispute** (reason:
-   don't recognise / wrong amount / charged twice / other, plus a note), **Later**.
-2. **Waiting:** pending lines; not counted until settled, but can be confirmed early.
-3. **Done:** seen before, matched, not spend; collapsed, tap to check or undo.
+Actions: Confirm new, Link existing, Same observed event, Separate transaction, Correct fields, Ignore with reason,
+Dispute (don't recognise / wrong amount / charged twice / other), Later. Resolve account and required fields first.
+**Bulk approval excludes uncertain fields, pending rows, disputes, ambiguous identity and unresolved matches**;
+show exact eligible count, debit/credit totals and categories before confirmation. Counts distinguish observations,
+unique events and posted transactions so overlapping images do not inflate recorded spend totals.
 
-Footer: line count and total of the upload, how much of it is now recorded, and the flagged manual records for the
-same period. "Confirm all new" asks once more with the count and total.
+Original files are not uploaded to server storage in v1. Keep extraction text/provenance for later review and allow
+HM to reattach a source in a later session. Do not promise a permanent source-image preview. Strip full identifiers
+before persistence; never log raw uploads, payloads, financial amounts or extracted descriptions in public systems.
 
-## 8. Disputes
+## 8. Disputes and later resolution
 
-- A **Disputes** list across all batches: date, merchant, amount, reason, note, days open.
-- Resolve as: **Legit after all** → creates the record (same as Confirm); **Reversed or refunded** → link the
-  credit line, both recorded as expense plus refund (or neither, if HM chooses); **Drop** → kept for history,
-  never posted.
-- Disputed amounts are never counted in reports or min-spend until resolved as legit.
+Disputes list event, known date, merchant, amount, reason, note, age and evidence across batches. It is an import
+review queue, not an instruction to file a dispute with a bank.
 
-## 9. Build order (recommended)
+- Legitimate: recheck current matching; link an existing manual/recurring transaction or create one, atomically.
+- Correct extraction: retain the original observation and correction history, then approve/link the corrected result.
+- Refund/reversal: distinguish a cancelled pending authorization from an actual posted charge plus refund. Posted
+  bank movements remain expense plus refund/transfer as appropriate; link existing records before creating any.
+- Ignore/drop: retain evidence and reason; create no transaction. Do not delete an already recorded transaction.
 
-| PR | Scope | Notes |
-|---|---|---|
-| 1. Database | `import_batches`, `import_lines`, `stage_import()` (fingerprints, dedupe, pending → settled, matching), confirm / dispute / resolve functions, RLS and tests with invented data | Migration; staging first, production only on HM's "merge" |
-| 2. App | Import page (paste or upload the agent's JSON; built-in parser for known CSV layouts; account chosen by HM, never taken from the file), review screen, disputes list, coverage view | Server-side schema check and size limits on every import |
-| 3. Manual-entry checks | *Not seen on bank* flags, duplicate warning on the Add screen | Small, after a few real imports |
-| Agent (no app change) | `docs/import-agent.md`: generic instructions and the JSON schema; HM creates the "Ledger Import" Project and adds his private samples there | Samples never go to GitHub |
-| Later | Connector (option B), statement link for reconciliation (B-11) | Only if needed |
+Unapproved import-only events contribute nothing to reports, balances or min-spend. Disputing an observation does
+not silently remove or suppress an existing manual transaction. HM must separately review any correction/reversal.
+Any early-confirmed pending event counts once under the existing transaction rules, is labelled provisional, and
+settlement revises that record only after review. Bank status is not a guarantee of min-spend eligibility.
 
-## 10. Decisions for HM
+## 9. Build order and acceptance gates
 
-Recommended answers are in §0. Please confirm or change:
+| PR | Scope |
+|---|---|
+| 1. Backend | Shared validation schema; observation/event/decision tables; stage, confirm/link/dispute/resolve; idempotency, permissions and concurrency tests |
+| 2. App | Known CSV parser from day one, JSON handoff, confirmed account selection, iPhone review, waiting/disputes, coverage display and manual-candidate approval |
+| 3. Entry reconciliation | Reverse entry warnings, recurring coordination, complete-coverage absence checks after real-import feedback |
+| Agent | Generic instructions in `docs/import-agent.md`; validate the chosen private agent setup with HM's samples outside GitHub |
+| Later | Scoped connector, retained originals if requested, split/aggregate allocations and B-11 full-statement reconciliation |
 
-1. In-app CSV parser plus Claude agent for screenshots (§0 rows 1–2)
-2. Paste into the app, no connector yet (row 3)
-3. Pending lines wait by default (row 6)
-4. Two-way reconciliation with manual entry (row 7)
-5. Matching windows (row 8)
-6. Keep parsed lines only, no file storage (row 9)
-7. B-10 to P1, after B-28 and B-04, before B-05 (row 10)
+Acceptance cases must use invented fixtures in GitHub; private sample validation stays outside public logs:
+
+1. Known CSV preamble, quoted columns, debit/credit separation, date/status parsing, zero/both-sided invalid rows,
+   unknown layouts, currency precision, oversize payloads and structured rejection with no partial commit.
+2. Same request/file retry, changed payload with reused key, full 1–10 / 5–15 overlap, different row ordering,
+   two/three equal purchases and a cropped screenshot showing only one equal purchase: preserve ambiguity/counts.
+3. Screenshot overlap, clipped date header, unknown date basis/account, truncated or unreadable amount/currency:
+   keep observations, block unresolved posting and bulk approval, require explicit same-event decisions.
+4. Pending to settled with changed merchant/reference/date/amount, long posting delay and abandoned authorization:
+   preserve event ID/history; do not double-post or assume cancellation.
+5. Manual-first/import-first/recurring-first flows, same-amount unrelated merchants, competing batch candidates,
+   wrong manual amount/account and locked records; preserve personal details and require correction approval.
+6. Card repayment and both transfer sides, refund/partial refund/waiver, unknown credit and non-SGD ledger mapping:
+   correct kinds, signs, category, currency and totals; no double-counted transfer or invented funding account.
+7. Concurrent double approval, stale suggestions, failure/timeout/retry and dispute resolution after manual entry:
+   one approved result, transactional rollback, durable decision history and no duplicate financial transaction.
+8. Partial coverage never generates missing-entry assertions; complete coverage respects date basis/grace period.
+   Import-only disputes are excluded; disputing linked observations leaves existing transactions unchanged.
+9. Anon/viewer/nonmember denied for every operation, forged account/household/link rejected, cross-family foreign
+   keys enforced, direct-write bypass denied, no upload contents/secrets in public logs or repository artifacts.
+
+## 10. Product decisions still open for HM
+
+1. Known CSV parser plus private AI agent for images; choose initial agent platform after a private extraction trial.
+2. Paste/upload first; scoped connector later if useful.
+3. Pending wait by default, with explicit validated early confirmation.
+4. Two-way reconciliation, all new manual and ambiguous overlap matches confirmed by HM in v1.
+5. Suggested date/FX search windows and settlement grace period; B-04 date/counting policy alignment.
+6. Parsed redacted evidence only initially, no original-file storage; reattach originals when needed.
+7. Raise B-10 to P1 after B-28/B-04 and before B-05 (recommendation only; tracker priority unchanged).
