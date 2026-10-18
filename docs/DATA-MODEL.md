@@ -1,6 +1,7 @@
 # Data model
 
-How money is recorded and reported. The full design and decisions are in `design/category-design.md`.
+How money is recorded and reported. The full design and its decisions are kept in the project's private repository
+(see `pm/README.md`); this page is the generic model developers need.
 
 ## Transactions
 

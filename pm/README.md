@@ -1,20 +1,17 @@
-# Project docs (master copy)
+# Project docs: not here
 
-**These files are the master copy** of the project docs, on `main` in this public repo since 2026-10-09 (B-30). Read and edit them here, not in the Claude or ChatGPT projects. **This repo is public: no family details** (see `SYNC.md`, "Privacy").
+The backlog, requirements, decisions and designs for this app are kept in a separate private repository, which is
+their only authoritative copy (since 2026-10-18). This public repo holds no tracker, requirements or design
+documents, and must not hold copies of them.
 
-| Path | What it is |
-|---|---|
-| `pm/backlog-tracker.md` | Backlog, priorities, phase plan, decisions, change log. Its own "How to update this doc" rules apply |
-| `pm/SYNC.md` | Sync protocol for the GitHub master and the Claude and ChatGPT mirrors. Read by every tool |
-| `pm/project-instructions.md` | The instructions for chats in the Claude Project |
-| `pm/chatgpt-project-instructions.md` | The instructions for the ChatGPT project |
-| `design/rtm.md` | Requirements traceability matrix and gaps |
-| `design/category-design.md` | Category and data design of record (public version, without historical figures) |
-| `design/statement-import.md` | Transaction import with review (B-10): proposed design, matching rules and decisions |
-| `docs/import-agent.md` | Instructions for the private import agent (no data; samples stay in the private agent project) |
+- **What's here:** app code, database migrations, tests with invented data, CI and deployment workflows, and generic
+  technical docs: [setup](../docs/SETUP.md), [data model](../docs/DATA-MODEL.md), [runbook](../docs/RUNBOOK.md),
+  [how changes are made](../CONTRIBUTING.md), [agent notes](../CLAUDE.md).
+- **What's not:** planning documents and anything about the families who use the app. `scripts/privacy-guard.py`
+  fails a PR that adds them.
+- **Referring to them:** PRs here name a backlog item by ID only ("B-10") and a private PR as "private #n". Never
+  quote or summarise private content in this repo, its PRs, comments, commit messages or logs.
 
-**Private archive** (`huiminlatsg/dragon-turtle-ledger`, read-only): the raw 2024–2026 monthly history CSVs, the full category design with historical figures, the history import tools and reports, and the account-loading and backup workflows. Open it only when the history import (B-03, B-05) or account loading needs it.
-
-**Editing:** use a `docs/<tool>-<topic>` branch and a PR, merged only when HM says "merge" (see `CLAUDE.md`).
-
-**The Claude and ChatGPT project copies are read-only mirrors of `main`** (the `.md` files carry a banner saying so). They can lag behind `main`, so every chat reads the latest from GitHub first, and refreshes the mirror after a doc changes on `main`. Each project's custom instructions must match the text in `pm/project-instructions.md` or `pm/chatgpt-project-instructions.md`; HM pastes it in when it changes.
+Between 2026-10-09 and 2026-10-18 cleaned copies of the project docs lived in `pm/` and `design/` here (see app #3
+and app #4). They were removed when the private repository became authoritative again; older commits still contain
+them.
