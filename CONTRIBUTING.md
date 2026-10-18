@@ -100,8 +100,8 @@ python3 scripts/privacy-guard.py && python3 -m unittest discover -s tests/python
 - Add a new file in `supabase/migrations/` named `YYYYMMDDHHMMSS_what_it_does.sql`. Never edit a
   migration that has already been merged, even to remove text; propose a separate remedy instead.
 - New tables must `enable row level security` and get policies using `public.is_member()` /
-  `public.can_write()`, plus `revoke all ... from anon`. Supabase grants new tables to `anon`
-  by default, so the revoke matters.
+  `public.can_write()`, plus `revoke all ... from anon`. Check explicit grants as well as RLS: default grants depend on the project configuration. Grant only the
+  operations each role requires.
 - Add checks for the new behaviour to `supabase/tests/rls.test.sql`.
 - Destructive changes (dropping a column) happen in two releases: stop using it, then drop it.
 

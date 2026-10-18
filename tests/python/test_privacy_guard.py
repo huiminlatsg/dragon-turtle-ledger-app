@@ -78,6 +78,13 @@ class ContentRules(unittest.TestCase):
         ]
         self.assertEqual(run({"t.md": "\n".join(harmless)}), [])
 
+    def test_two_series_mastercard_is_refused(self):
+        number = "2221" + "0000" + "0000" + "0009"  # published test number
+        self.assertTrue(guard.luhn_ok(number))
+        for text in [number, " ".join(number[i:i + 4] for i in range(0, 16, 4))]:
+            with self.subTest(text=text):
+                self.assertEqual(len(run({"example.ts": text})), 1)
+
     def test_personal_email(self):
         self.assertEqual(len(run({"a.md": "mail someone" + "@" + "gmail.com"})), 1)
         self.assertEqual(run({"a.sql": "alice@test.local, 1234+bot@users.noreply.github.com"}), [])

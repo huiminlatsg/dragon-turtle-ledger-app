@@ -12,7 +12,7 @@ refuses:
   - Supabase project addresses and IDs (<project id>.supabase.co, dashboard links, pooler user names, project_id or
     project ref assignments); project IDs live in GitHub and Vercel settings;
   - payment card numbers (13-19 digits that pass the Luhn check);
-  - a short list of private words. They are stored only as SHA-256 hashes, so this file reveals nothing. A word
+  - a short list of private words. They are stored as SHA-256 hashes to avoid plaintext literals; predictable values may still be guessed. A word
     stored in lowercase matches in any case; other entries match exactly.
 
 It checks file names and the text of every tracked file, including comments, examples and migrations.
@@ -49,7 +49,7 @@ SUPABASE_PROJECT = re.compile(
     r"|\b(project_id|project[_-]?ref)\b\s*[:=]\s*[\"']?[a-z]{20}\b",
     re.IGNORECASE,
 )
-CARD_NUMBER = re.compile(r"(?<![\w.-])[3-6]\d{3}(?:[ -]?\d{4}){2}[ -]?\d{1,7}(?![\w.-])")
+CARD_NUMBER = re.compile(r"(?<![\w.-])[2-6]\d{3}(?:[ -]?\d{4}){2}[ -]?\d{1,7}(?![\w.-])")
 PRIVATE_WORD_HASHES = {
     "604f9389d5e3233dcc9e7642b26ac6700f7d2fba057f5000b3ca0a2affdd6acd",
     "e65c8b77b23f1f688fec490c49eb8769e02a0b39e2451dd77e0d8a9d0c37e5a2",
