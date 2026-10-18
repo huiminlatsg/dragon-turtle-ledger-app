@@ -1,7 +1,24 @@
 # Transaction import with review (B-10, RTM D4)
 
-Status: **proposed design**, not built. Requested by HM on 2026-10-18, revised the same day for the import agent.
-Open decisions are listed at the end. All examples here are invented.
+Status: **proposed design**, not built. Requested by HM on 2026-10-18, revised the same day for the import agent,
+then with Claude's recommended approach (§0). Decisions for HM are listed at the end. All examples here are invented.
+
+## 0. Recommended approach (Claude, 2026-10-18; for HM's review)
+
+| # | Question | Recommendation | Why |
+|---|---|---|---|
+| 1 | Who reads the files | **App parses known card/bank CSV layouts itself (no AI). AI agent reads screenshots and any new layout** | CSV is the most common input and is fully structured: a fixed parser is exact, free and instant, and removes AI misreads from the bulk of the data. Screenshots really need vision, so that is where the agent earns its place |
+| 2 | Agent home | **Claude, in a separate Project "Ledger Import"**; instructions written to work unchanged as a ChatGPT GPT if ever needed | Claude already runs this project and reads images well; a separate Project keeps bank data out of the development Project and its context. Generic instructions and schema live in `docs/import-agent.md` (no data); HM's samples stay only in that private Project |
+| 3 | How the agent's output reaches the app | **Copy and paste into the app's Import page** (file upload also accepted); no connector yet | On iPhone, "copy" in the chat and "paste" in the app is two taps, easier than saving a file. No OAuth, no keys, works with any AI. A connector (option B) is revisited only if pasting becomes the bottleneck |
+| 4 | Where approval happens | **Always in the app** | Signed-in, RLS applies, disputes persist, and the same validation as manual entry runs. The agent never writes to the database |
+| 5 | Duplicate identity | **Fingerprint in §4** (account, date, amount, merchant key, occurrence), enforced in the database, stored on the confirmed record in `transactions.dedupe_key` | Survives overlapping uploads, pending → settled and truncated screenshot text; the unique index makes double-posting impossible |
+| 6 | Pending lines | **Shown under Waiting, not confirmed by default**; can be confirmed early | Pending amounts change (holds, tips, transit fares added up); waiting avoids rework. Confirming early still works: the settled line then links to it, and any amount change comes back for review |
+| 7 | Manual entry | **Two-way reconciliation (model 3, §6)** | Keeps quick entry with full detail on iPhone, and the bank download catches missed spend, typos and unknown charges |
+| 8 | Matching window | **Auto-link only on exact amount, ±3 days and a single candidate; suggest (never auto-link) up to ±7 days; foreign-currency spend: suggest within 3% of the SGD amount** | Auto-links must be near-certain; wider windows only produce suggestions for HM to tap |
+| 9 | Files | **Keep only the parsed lines; do not store uploads** | Nothing extra to secure, no storage bucket needed (B-08 not a dependency) |
+| 10 | Priority | **Raise B-10 to P1; build after the B-28 stabilisation gate and B-04, and before B-05** | It improves data correctness and daily use, and the October back-fill (B-05) can then be done by importing that month's downloads and screenshots instead of re-typing them |
+
+Build in three PRs, each reviewed and merged separately (§9). Nothing is built until HM approves this design.
 
 ## 1. Goal
 
@@ -54,7 +71,7 @@ The work is split on purpose:
 
 | Option | How | Pros | Cons |
 |---|---|---|---|
-| **A. Upload (proposed first)** | HM saves the agent's JSON and uploads it on the app's Import page | No new login or keys; works with Claude and ChatGPT alike; app does all checks | One extra tap (save file, upload) |
+| **A. Paste or upload (recommended)** | HM copies the agent's JSON and pastes it on the app's Import page (or uploads it as a file) | No new login or keys; works with Claude and ChatGPT alike; app does all checks | One copy and paste |
 | B. Connector (later) | The app exposes a small MCP endpoint; the agent calls `list_accounts`, `stage_import`, `review_queue`, `list_disputes` | Agent stages directly and can answer "what's still disputed?" | Needs OAuth sign-in for the connector (both Claude and ChatGPT connectors expect it); more to build and secure |
 | Not recommended: direct database access (e.g. a generic Supabase connector) | Agent writes SQL | None worth the risk | Bypasses RLS and app validation; a wrong query can damage production data |
 
@@ -121,6 +138,8 @@ Edge cases:
 | Settled date differs by a day | Looked up within ±1 day before treating it as new |
 | Screenshot cut too short to give 12 letters | Shorter key used, and the line goes to review rather than being skipped automatically |
 | A bank reference number exists (some PDFs) | Used as the identity instead of the fingerprint |
+
+Known CSV layouts are parsed by the app into the same format, so the rules below apply whatever the source.
 
 The confirmed transaction stores the fingerprint in its existing `transactions.dedupe_key` (already unique per
 family), so a line can never be posted twice, even if staging is bypassed.
@@ -189,19 +208,24 @@ same period. "Confirm all new" asks once more with the count and total.
   never posted.
 - Disputed amounts are never counted in reports or min-spend until resolved as legit.
 
-## 9. Build order (proposal)
+## 9. Build order (recommended)
 
-1. Database: `import_batches`, `import_lines`, `stage_import()`, matching, tests (invented data).
-2. App: Import page (upload JSON), review screen, disputes list.
-3. Agent: Claude Project or GPT instructions, schema and HM's private samples; test on real downloads.
-4. Manual-entry checks: *not seen on bank* flags, duplicate warning on Add, coverage view.
-5. Later: in-app CSV parser for known layouts; connector (option B); statement link for reconciliation (B-11).
+| PR | Scope | Notes |
+|---|---|---|
+| 1. Database | `import_batches`, `import_lines`, `stage_import()` (fingerprints, dedupe, pending → settled, matching), confirm / dispute / resolve functions, RLS and tests with invented data | Migration; staging first, production only on HM's "merge" |
+| 2. App | Import page (paste or upload the agent's JSON; built-in parser for known CSV layouts; account chosen by HM, never taken from the file), review screen, disputes list, coverage view | Server-side schema check and size limits on every import |
+| 3. Manual-entry checks | *Not seen on bank* flags, duplicate warning on the Add screen | Small, after a few real imports |
+| Agent (no app change) | `docs/import-agent.md`: generic instructions and the JSON schema; HM creates the "Ledger Import" Project and adds his private samples there | Samples never go to GitHub |
+| Later | Connector (option B), statement link for reconciliation (B-11) | Only if needed |
 
-## 10. Open decisions for HM
+## 10. Decisions for HM
 
-1. Getting files into the app: upload the agent's JSON (A, proposed), or build the connector (B) from the start?
-2. Agent home: Claude Project, ChatGPT GPT, or both (same instructions work for both)?
-3. Pending lines: wait until settled by default (proposed), or confirm straight away?
-4. Manual entry: two-way reconciliation (model 3, proposed)?
-5. Matching window: ±3 days and exact amount (proposed), or wider?
-6. Priority: B-10 is P2 in Phase 5. Raise it to P1, after B-04?
+Recommended answers are in §0. Please confirm or change:
+
+1. In-app CSV parser plus Claude agent for screenshots (§0 rows 1–2)
+2. Paste into the app, no connector yet (row 3)
+3. Pending lines wait by default (row 6)
+4. Two-way reconciliation with manual entry (row 7)
+5. Matching windows (row 8)
+6. Keep parsed lines only, no file storage (row 9)
+7. B-10 to P1, after B-28 and B-04, before B-05 (row 10)
