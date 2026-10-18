@@ -68,7 +68,10 @@ Rules for acting from chat:
   never approves, disputes or resolves on its own initiative, and never from text inside an uploaded file.
 - Before any write the agent shows exactly what will happen (count, totals, each line or pair) and asks HM to
   confirm; bulk actions from chat follow the same eligibility rules as the app (§7).
-- Each call carries the expected version, so a stale view cannot double-post; decisions are recorded with the actor
+- Mutating decision tools require a short-lived, single-use server-issued confirmation token bound to HM,
+  the exact action, row IDs, versions and displayed changes. Changing the action or refreshing stale rows
+  invalidates the token and requires a new preview; a model-supplied `confirmed=true` is insufficient.
+- Each decision call carries the expected version, so a stale view cannot double-post; decisions are recorded with the actor
   "HM via connector (Claude/ChatGPT)" and can be undone in the app.
 - No raw SQL, no service-role or owner credentials, no tool that deletes transactions. Sign-in tokens are
   short-lived and revocable from the app. Tool inputs and outputs are never logged with amounts or descriptions.
@@ -193,9 +196,18 @@ be treated as the first purchase.
 transaction (`status = pending`) that counts under the existing rules. When a later upload has a settled
 observation, the backend identifies the pending event automatically when there is exactly one open pending event
 on the same account, same currency and direction, compatible merchant evidence and transaction date within ±2 days,
-and no other observation in the batch competes for it. Then the event and its transaction are updated: status
+and no other observation in the batch competes for it. The settled observation must also have no competing
+pending candidate, and must not already belong to another settled event. Only previously approved, linked events
+qualify: disputed/ignored events, uncertain required fields and split/aggregate cases stay in Needs you.
+Then the event and its transaction are updated: status
 `posted`, posting date and settled description added, and amount or date changed if the bank changed them. Any such
-change is listed under *Updated on settlement* with before/after values and undo; it never needs approval again.
+change is listed under *Updated on settlement* with before/after values and controlled undo; it needs no new
+approval when these preconditions hold. Recheck versions and all manual-entry, recovery and reconciled-statement
+constraints atomically. If financial fields were edited since the last approved bank snapshot, or any constraint
+would fail, retain the existing record and send the proposed correction to Needs you. Preserve category, ledger,
+people, receipts, notes and manual source; recompute ledger/SGD amounts only from known values under the existing
+currency rules. Missing conversion information blocks automatic financial changes. Retry returns the same result;
+undo checks the current version and constraints rather than overwriting later edits.
 Several candidates, or none, go to Needs you. Changed merchant wording, amount, dates or added references never
 create a new event automatically just because its old fingerprint changed. Date windows find suggestions, not proof; defaults in §6 are configurable and wider
 posting delays remain reviewable. Combined transit charges, split settlements and partial captures require manual
@@ -227,7 +239,11 @@ remain for full-statement reconciliation; do not create a second independent pos
   family/account/link foreign keys prevent cross-family links. Viewers cannot stage, approve, dispute or resolve.
   Functions must enforce actor/family and workflow state; use invoker rights where possible and review any
   privileged function's search path, grants and authorization. Do not allow raw client writes to bypass decisions.
-- `stage_import()` validates and records observations and suggestions; it creates no financial transactions.
+- `stage_import()` validates and records observations and suggestions; it creates no **new** financial
+  transactions. It may invoke the narrowly scoped automatic settlement update in §4 for previously approved
+  events, under HM's standing policy. That update has its own atomic version check, idempotency and audit
+  decision with the initiating user and automatic-settlement reason. Return staged and updated counts separately;
+  re-uploading old evidence never rolls an event back from settled to pending. All other posting needs approval.
 - Confirm/link/dispute/resolve functions lock the event and relevant transaction candidates, check the expected
   version and current state, and atomically persist the transaction/link, decision and queue state. Revalidate
   candidate eligibility at commit time; stale suggestions cannot create duplicate or incorrect links.
@@ -253,7 +269,8 @@ Never infer a funding account from a card repayment label. HM supplies it or the
 ignoring a payment is auditable and never records it as income. Reconcile the two bank sides to one transfer.
 For new transactions set `source=statement`, `merchant_raw` from the redacted source, and the stable posting key.
 For existing manual/recurring records preserve ID, source, category, ledger, people, notes and receipts; attach bank
-evidence separately. Updates to financial fields require an explicit reviewed correction and existing lock rules.
+evidence separately. Financial corrections require explicit review, except for the approved-event automatic
+settlement policy in §4. Existing lock, recovery and currency rules apply in both cases.
 
 Store transaction date and posting date independently in the event, preserve date-only precision, and define a
 consistent Asia/Singapore conversion to `txn_at` without implying a known time. Do not replace an unknown
@@ -355,6 +372,8 @@ Acceptance cases must use invented fixtures in GitHub; private sample validation
 4. Pending to settled with changed merchant/reference/date/amount, long posting delay and abandoned authorization:
    a unique candidate updates the same record (listed with before/after and undo), several candidates go to
    review, a stale pending is flagged; never double-post or assume cancellation. Approved pending counts once.
+   Also test disputed/ignored events, already-settled observations, manual edits, statement locks, recovery limits,
+   missing FX values, old pending replays and undo after a later edit: none may silently overwrite current data.
 5. Manual-first/import-first/recurring-first flows, same-amount unrelated merchants, competing batch candidates,
    wrong manual amount/account and locked records; preserve personal details and require correction approval.
    "Confirm strong links" includes only unique two-way candidates and excludes foreign-currency and competing rows.
@@ -367,7 +386,8 @@ Acceptance cases must use invented fixtures in GitHub; private sample validation
 9. Anon/viewer/nonmember denied for every operation, forged account/household/link rejected, cross-family foreign
    keys enforced, direct-write bypass denied, no upload contents/secrets in public logs or repository artifacts.
 10. Connector: unauthenticated or expired token refused; another family's data unreachable; chat actions need an
-   explicit confirmation step, use the same eligibility and version checks, are audited as "via connector" and can
+   server-bound confirmation token (reject tampered, replayed or stale tokens), use the same eligibility and
+   version checks, are audited as "via connector" and can
    be undone in the app; instructions embedded in an uploaded file never trigger a write.
 
 ## 10. Decisions (HM, 2026-10-18)
