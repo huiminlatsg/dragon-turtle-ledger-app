@@ -105,6 +105,11 @@ Unknown fields are null; they are not zero or an invented date. Example:
   account, interval, transaction/posting date basis and evidence that all rows were included. An "as at" date
   or min/max row dates are not that evidence. AI output alone cannot upgrade completeness without backend
   validation of a known export format or HM's explicit confirmation in the app.
+- **Known complete layouts.** A CSV layout becomes `complete_export` only after HM has accepted it once, on a real
+  download, as "contains every transaction between its first and last row" (a flag on that layout's parser,
+  recorded with who accepted it and when). For such a layout the backend sets coverage to the days strictly
+  inside the observed range, on the layout's date basis; the first and last day stay partial. This is the only
+  way min/max row dates contribute to coverage, and it is what the automatic attach in §4 relies on.
 
 ## 4. Identity and overlapping uploads
 
@@ -264,7 +269,8 @@ Dispute (don't recognise / wrong amount / charged twice / other), Later. Resolve
 show exact eligible count, debit/credit totals and categories before confirmation.
 **Confirm strong links** is a separate one-tap bulk action for manual/recurring matches where, in both directions,
 there is exactly one candidate: same account, currency and direction, exact amount, transaction date within ±1 day
-and compatible merchant evidence, both settled, no foreign currency and no competing observation in the batch.
+and compatible merchant evidence, the bank observation settled, no foreign currency and no competing observation
+in the batch.
 It lists the count and each pair before confirming; everything else stays individual. Counts distinguish observations,
 unique events and posted transactions so overlapping images do not inflate recorded spend totals.
 
