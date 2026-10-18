@@ -1,7 +1,7 @@
 # Transaction import with review (B-10, RTM D4)
 
 Status: **proposed design, not built**. Requested by HM on 2026-10-18; revised by Claude, then by ChatGPT
-following PR review. Implementation, priority and product choices below still require HM's decision.
+following PR review, then by Claude in the next review round. Implementation, priority and product choices below still require HM's decision.
 All examples are invented. Private samples, their extracted rows and totals never enter this repository or PR.
 
 ## 0. Recommended approach (for HM's review)
@@ -12,9 +12,9 @@ All examples are invented. Private samples, their extracted rows and totals neve
 | Agent home | Separate private Ledger Import project in Claude, or a ChatGPT agent with the same extraction contract | Samples teach layouts; keep financial inputs separate from development context. Validate each platform's setup separately |
 | Handoff | Paste or upload standard JSON into the signed-in app; connector later | The first release needs no agent database credentials |
 | Approval | HM approves in the app; unresolved required fields block approval | Review is durable and uses family permissions |
-| Identity | Stable bank-event IDs plus source observations; fingerprints find candidates | A hash cannot manufacture a bank transaction ID when the source supplies none |
+| Identity | Stable bank-event IDs plus source observations; fingerprints find candidates. Overlapping verified complete CSV exports attach settled rows automatically by multiplicity on fully covered days (§4); everything else is proposed | A hash cannot manufacture a bank transaction ID, but two complete exports of the same days are deterministic evidence; the common overlapping-download case must not become a manual chore |
 | Pending | Waiting by default; explicit early confirmation allowed after validation | Settlement can change dates, descriptions and amounts |
-| Manual entry | Two-way reconciliation, with HM-confirmed matches in the first release | Preserve manual detail and catch missed or mistyped records |
+| Manual entry | Two-way reconciliation, with HM-confirmed matches in the first release; strong single-candidate links confirmable together in one tap (§7) | Preserve manual detail and catch missed or mistyped records without a tap per routine purchase |
 | Matching | Account, currency, direction, merchant compatibility, amount and dates; resolve competing candidates across the batch | One equal-amount candidate is insufficient proof |
 | File retention | No server-side original uploads initially; retain redacted parsed observations and provenance | Enables review without adding a storage dependency; later original-file retention is a separate choice |
 | Priority | Recommend P1 after B-28 and B-04, before B-05; **not yet accepted** | Import could reduce back-fill effort; existing priority remains unchanged |
@@ -135,15 +135,26 @@ Matching sequence:
    Same-reference material conflicts require review; a later reference becomes an alias, not a replacement ID.
 4. Without a strong reference, compare account, currency, direction, merchant evidence, dates, amount and known
    status transitions. Resolve candidate competition across the whole batch, not independently per row.
-5. Across overlapping **complete** exports, compare multiplicities within fully covered days and suggest the
-   overlapping events. Preserve equal repeated purchases. Local occurrence numbers help display counts only;
-   they are never stable identifiers across uploads. Partial/cropped screenshots require explicit overlap review.
+5. Across overlapping **complete** exports, compare multiplicities within fully covered days. Preserve equal
+   repeated purchases. Local occurrence numbers help display counts only; they are never stable identifiers across
+   uploads. Partial/cropped screenshots require explicit overlap review.
+   - **Automatic attach (deterministic case).** Both observations come from a known CSV layout that HM has
+     accepted once as a complete export, the day is fully covered by both exports (days strictly inside each
+     export's observed range, on the same date basis; boundary days count as partial), both are settled, and
+     account, currency, direction, transaction date, posting date, amount and raw description are identical.
+     If the earlier export has *k* such observations and the new one *n*, `min(k, n)` attach to the existing
+     events and `n − k` (if positive) become new events. No choice is involved, so no review is needed; the
+     attached rows appear under Done with undo.
+   - Any difference in status, wording, dates or amount, any partial day and any screenshot or AI-extracted row
+     falls back to proposed matches.
 6. Ambiguous observations stay in Needs you. HM selects Same transaction, Separate transaction, or Later.
    Every observation remains traceable even when it is the same event as another observation.
 
 For uploads covering 1–10 Jan and 5–15 Jan, 5–10 Jan is a reconciliation interval, not an instruction to drop
-all matching hashes. Strong IDs permit definite event reuse; otherwise present proposed overlap matches and
-preserve count differences. A cropped image containing the second of two identical purchases must not silently
+all matching hashes. For two complete CSV exports, settled identical rows on 6–9 Jan attach automatically by the
+rule above (5 and 10 Jan are boundary days of one export and are proposed); rows that were pending in the first
+export and settled in the second are proposed. Strong IDs permit definite event reuse; otherwise present proposed
+overlap matches and preserve count differences. A cropped image containing the second of two identical purchases must not silently
 be treated as the first purchase.
 
 Pending-to-settled observations attach to the same event only on adequate identity evidence or HM's confirmation.
@@ -155,7 +166,10 @@ resolution in v1. Stale pending observations remain visible; disappearance alone
 ## 5. Data, permissions and atomic operations
 
 Proposed new tables: `import_batches`, `import_observations`, `bank_events`, `bank_event_references`,
-`import_decisions`. Names are provisional until implementation review. Existing `statements` / `statement_lines`
+`import_decisions`. Names are provisional until implementation review. **v1 minimum:** batches, observations,
+events and decisions; the known card CSV layouts carry no stable issuer reference, so `bank_event_references`
+can start as a nullable reference column on the event and become a table only when a source with stable
+references (or reference aliases) is added. This keeps the first backend PR smaller without changing behaviour. Existing `statements` / `statement_lines`
 remain for full-statement reconciliation; do not create a second independent posting path for the same bank events.
 
 - Batch: family/account, request key/digest, parser/schema version, source, uploader/time, observed range,
@@ -247,7 +261,11 @@ Screenshots with visible endpoints alone never certify intervening days. This ch
 Actions: Confirm new, Link existing, Same observed event, Separate transaction, Correct fields, Ignore with reason,
 Dispute (don't recognise / wrong amount / charged twice / other), Later. Resolve account and required fields first.
 **Bulk approval excludes uncertain fields, pending rows, disputes, ambiguous identity and unresolved matches**;
-show exact eligible count, debit/credit totals and categories before confirmation. Counts distinguish observations,
+show exact eligible count, debit/credit totals and categories before confirmation.
+**Confirm strong links** is a separate one-tap bulk action for manual/recurring matches where, in both directions,
+there is exactly one candidate: same account, currency and direction, exact amount, transaction date within ±1 day
+and compatible merchant evidence, both settled, no foreign currency and no competing observation in the batch.
+It lists the count and each pair before confirming; everything else stays individual. Counts distinguish observations,
 unique events and posted transactions so overlapping images do not inflate recorded spend totals.
 
 Original files are not uploaded to server storage in v1. Keep extraction text/provenance for later review and allow
@@ -286,12 +304,16 @@ Acceptance cases must use invented fixtures in GitHub; private sample validation
    unknown layouts, currency precision, oversize payloads and structured rejection with no partial commit.
 2. Same request/file retry, changed payload with reused key, full 1–10 / 5–15 overlap, different row ordering,
    two/three equal purchases and a cropped screenshot showing only one equal purchase: preserve ambiguity/counts.
+   Complete-export overlap: interior-day identical settled rows attach automatically with `min(k, n)` and
+   `n − k` new; boundary days, status changes and screenshots stay proposed.
 3. Screenshot overlap, clipped date header, unknown date basis/account, truncated or unreadable amount/currency:
    keep observations, block unresolved posting and bulk approval, require explicit same-event decisions.
 4. Pending to settled with changed merchant/reference/date/amount, long posting delay and abandoned authorization:
    preserve event ID/history; do not double-post or assume cancellation.
 5. Manual-first/import-first/recurring-first flows, same-amount unrelated merchants, competing batch candidates,
    wrong manual amount/account and locked records; preserve personal details and require correction approval.
+   "Confirm strong links" includes only unique two-way candidates and excludes pending, foreign-currency and
+   competing rows.
 6. Card repayment and both transfer sides, refund/partial refund/waiver, unknown credit and non-SGD ledger mapping:
    correct kinds, signs, category, currency and totals; no double-counted transfer or invented funding account.
 7. Concurrent double approval, stale suggestions, failure/timeout/retry and dispute resolution after manual entry:
@@ -306,7 +328,8 @@ Acceptance cases must use invented fixtures in GitHub; private sample validation
 1. Known CSV parser plus private AI agent for images; choose initial agent platform after a private extraction trial.
 2. Paste/upload first; scoped connector later if useful.
 3. Pending wait by default, with explicit validated early confirmation.
-4. Two-way reconciliation, all new manual and ambiguous overlap matches confirmed by HM in v1.
+4. Two-way reconciliation, all new manual and ambiguous overlap matches confirmed by HM in v1 (strong single-candidate
+   links in one tap); identical settled rows in overlapping complete CSV exports attach automatically.
 5. Suggested date/FX search windows and settlement grace period; B-04 date/counting policy alignment.
 6. Parsed redacted evidence only initially, no original-file storage; reattach originals when needed.
 7. Raise B-10 to P1 after B-28/B-04 and before B-05 (recommendation only; tracker priority unchanged).
