@@ -44,6 +44,13 @@ HM does not open GitHub, Supabase or Vercel for routine work. Claude runs the pi
    in a PR opened only to log a merge, check or status (HM, 2026-10-08). Refresh the Claude Project mirror after a
    merge only if a mirrored doc changed. No family details in tracker text.
 
+## PR reviews
+
+A request to review a PR includes committing focused corrections to its existing branch, maintaining a summary
+comment, and marking it ready for the next review round after validation. This includes the other AI session's
+branch; explicit read-only requests, Dependabot/fork restrictions, feature freezes and production restrictions
+still apply. Follow `pm/SYNC.md`, "PR review workflow". Merge only on HM's explicit "merge" for that PR.
+
 ## GitHub Actions
 
 Public repo: standard GitHub-hosted runners cost no Actions minutes. The habits from the private-repo days are

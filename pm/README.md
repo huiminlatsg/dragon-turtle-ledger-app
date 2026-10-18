@@ -10,6 +10,8 @@
 | `pm/chatgpt-project-instructions.md` | The instructions for the ChatGPT project |
 | `design/rtm.md` | Requirements traceability matrix and gaps |
 | `design/category-design.md` | Category and data design of record (public version, without historical figures) |
+| `design/statement-import.md` | Transaction import with review (B-10): proposed design, matching rules and decisions |
+| `docs/import-agent.md` | Instructions for the private import agent (no data; samples stay in the private agent project) |
 
 **Private archive** (`huiminlatsg/dragon-turtle-ledger`, read-only): the raw 2024–2026 monthly history CSVs, the full category design with historical figures, the history import tools and reports, and the account-loading and backup workflows. Open it only when the history import (B-03, B-05) or account loading needs it.
 

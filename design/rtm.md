@@ -174,7 +174,7 @@ Every in-scope data-model requirement is in production. Gaps G1, G2, G3 and G5 w
 | D1 | Screens: sign-in, family invite, accounts, expense/income/transfer entry, ledgers | Phase 1 — sign-in, family invite and accounts shipped (v0.5.0–v0.7.0); ledgers, expense / income / transfer entry, records list, edit, delete, refunds and receipt photos shipped (v0.11.0–v0.19.0, PRs #33–#41). Screens for D1 are complete |
 | D2 | Min-spend dashboard, reports, CSV export | Phase 2 |
 | D3 | Due-date and annual-fee reminders, low-balance alerts, budgets UI | Phase 5 |
-| D4 | Statement PDF/CSV import and auto-matching | Phase 5 |
+| D4 | Transaction import with review: CSV, screenshots and statement PDFs, matched against existing records, each new line confirmed by HM (widened 2026-10-18; design `design/statement-import.md`, B-10) | Phase 5 (priority under review) |
 | D5 | Historical import using the old → new mapping (§8). **Revised 2026-10-04:** no per-transaction export is needed. The input is the cleaned monthly category summary (2024 to 2026), kept in the private archive repo, converted at one fixed historical rate (2026-10 re-screenshotted before go-live and converted at that day's rate). Rows with `treatment` transfer, duplicate, waived_fee, replaced or one_time are not imported as spend; pass_through and reimbursed rows import with recoverable = full amount, status received. Needed the category 医疗健康 / 体检 in the seed (R2.1; done in v0.10.2) | After the entry screens (D1); design §2b, §2c |
 | D6 | ~~Split historical 税费（历史未拆分）~~ **Done in the history data (2026-10-04):** tax rows now use the actual bank debits per month for 2024-01 to 2026-09, replacing the old app's fixed amount | Done |
 | D7 | Member tag values | Configure when needed |

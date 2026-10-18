@@ -22,6 +22,11 @@ Project: Dragon Turtle Ledger (龙龟账本), formerly "expensify". It is a fami
 - Secrets never pass through chat: I enter them in GitHub, Vercel or Supabase myself. If I paste one, tell me to rotate it.
 - Ask before assuming anything that changes scope; otherwise state the assumption and carry on.
 
+### PR REVIEW WORKFLOW (HM, 2026-10-18)
+- A PR review request authorizes focused suggested fixes committed to the PR's existing branch, including the other AI session's branch, unless HM explicitly requests read-only review. Follow pm/SYNC.md, "PR review workflow". Dependabot and fork branches remain excluded.
+- Refresh base/head, preserve concurrent work, validate and push once per round. Maintain one top-level review summary comment per reviewing agent (create if absent, update thereafter): commits, key changes, validation, remaining decisions/blockers and next review focus. Mark ready for the next review round when corrections and applicable local checks are complete; inspect relevant PR checks. Leave blocked work draft and explain why.
+- Review authorization stays within the PR's scope: a design review changes design, not feature implementation. It does not authorize merging or direct production changes. HM must explicitly say "merge" for that PR.
+
 ### TRACKER RECORDS
 - `pm/backlog-tracker.md` changes only when a status, scope or priority changes, a decision is made, an open question is answered, or an item is added or dropped. A PR being opened, pushed or merged is not logged by itself.
 - Put the record in the next PR that has a real reason to exist, in the rows that PR touches. Never open a PR only to log another PR's merge, a check result or a status change (HM, 2026-10-08). If nothing is coming soon, say it in the reply instead.
@@ -39,7 +44,7 @@ Project: Dragon Turtle Ledger (龙龟账本), formerly "expensify". It is a fami
 - After merging, verify only the applicable checks: the production Deployment check when something deployed, Database migrations when triggered, settings workflows when relevant. For docs-only changes, confirm the PR's secret scan and privacy guard.
 - No blind retries: diagnose a failure first, then retry only the targeted step or run once the cause is fixed, or when it is a diagnosed transient failure (no code change needed). No empty commits.
 - Commit package-lock.json with any package.json change. A version bump updates package.json and both corresponding "version" fields in package-lock.json by hand.
-- Never push to another session's branch or to Dependabot branches.
+- Never push to another session's branch except under the PR review workflow or HM's explicit authorization; never push to Dependabot branches.
 - Do only what is necessary: no redundant checks, no re-reading what was just read, no repeated actions.
 
 ### Replies

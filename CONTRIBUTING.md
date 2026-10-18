@@ -14,6 +14,12 @@ Every change follows the same path, so the live app keeps working:
 6. **Release** — bump `version` in `package.json`, add a `CHANGELOG.md` entry, and tag
    (`git tag v1.1.0 && git push --tags`), then create a GitHub Release from the tag.
 
+## PR reviews
+
+PR review requests include focused fixes committed to the existing PR branch, an updated review summary
+comment, and readiness for the next review round after validation. Explicit read-only requests override this.
+The shared rules and exceptions are in `pm/SYNC.md`, "PR review workflow"; merging still needs HM's "merge".
+
 ## Local development
 
 ```sh

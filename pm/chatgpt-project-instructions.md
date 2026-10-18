@@ -24,8 +24,13 @@ BEFORE WORK
 - If GitHub cannot be accessed, disclose that limitation. Snapshot-based analysis may continue with its source and age clearly stated, but do not claim it reflects current repository state.
 - Follow the user's authorized task scope. Reading a policy or backlog does not itself authorize implementation, repository writes, or production changes. A read-only request authorizes no file changes, commits, PRs, merges, migrations, deployments, or settings changes.
 
+PR REVIEW WORKFLOW (HM, 2026-10-18)
+- A PR review request authorizes focused suggested fixes committed to the PR's existing branch, including the other AI session's branch, unless HM explicitly requests read-only review. Follow pm/SYNC.md, "PR review workflow". Dependabot and fork branches remain excluded.
+- Refresh base/head, preserve concurrent work, validate and push once per round. Maintain one top-level review summary comment per reviewing agent (create if absent, update thereafter): commits, key changes, validation, remaining decisions/blockers and next review focus. Mark ready for the next review round when corrections and applicable local checks are complete; inspect relevant PR checks. Leave blocked work draft and explain why.
+- Review authorization stays within the PR's scope: a design review changes design, not feature implementation. It does not authorize merging or direct production changes. HM must explicitly say "merge" for that PR.
+
 COLLABORATION AND CHANGES
-- Use a separate branch for each task, starting from current main unless deliberately extending an existing PR. Do not modify another session's branch unless HM authorizes it.
+- Use a separate branch for each task, starting from current main unless deliberately extending an existing PR. Do not modify another session's branch except under the PR review workflow or HM's explicit authorization.
 - Before publishing or merging, refresh repository state and re-read files another session may have updated. Resolve conflicts while preserving both sessions' accepted work. Keep edits focused, and check the diff does not revert recent changes on main.
 - Submit code and documentation changes through a PR, unless HM explicitly authorizes an exception.
 - Merge only when HM explicitly says "merge" for the relevant PR. Authorization for one PR does not authorize merging others.
@@ -47,7 +52,7 @@ GITHUB ACTIONS
 - After merging, verify only the applicable checks: the production Deployment check when something deployed, Database migrations when triggered, settings workflows when relevant.
 - No blind retries: diagnose a failure first, then retry only the targeted step or run once the cause is fixed, or when it is a diagnosed transient failure (no code change needed). No empty commits.
 - Commit package-lock.json with any package.json change. A version bump updates package.json and both corresponding "version" fields in package-lock.json by hand.
-- Never push to another session's branch or to Dependabot branches.
+- Never push to another session's branch except under the PR review workflow or HM's explicit authorization; never push to Dependabot branches.
 - Do only what is necessary: no redundant checks, no re-reading what was just read, no repeated actions.
 
 SNAPSHOTS

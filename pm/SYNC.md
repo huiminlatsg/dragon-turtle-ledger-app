@@ -27,6 +27,14 @@ Read by every tool (Claude, ChatGPT, others) that works on the project.
 6. If `main` moved while your PR is open, rebase or re-apply on the latest `main` before asking HM to merge. The later PR resolves conflicts, never overwrites. Check the diff does not revert recent changes on `main`.
 7. Don't write to a mirror to "save" a change. A mirror changes only by refresh.
 
+## PR review workflow (HM, 2026-10-18)
+- A request to review a PR authorizes reviewing and committing focused suggested fixes to that PR's existing branch, including a branch started by the other AI session. This is an exception to the separate-branch and other-session restrictions; never write to Dependabot or fork branches under this rule.
+- Refresh the base and PR head first, preserve concurrent accepted work, and review the final diff. Apply corrections within the PR's scope; do not implement a feature merely because its design PR is under review. Leave unresolved product choices clearly proposed. An explicitly read-only review overrides this workflow.
+- Validate the changes locally, run the privacy guard and applicable checks, and push once per review round. Inspect workflow side effects before publishing or marking ready. Do not bypass a production-change restriction or a feature freeze.
+- Maintain one top-level review summary comment per reviewing agent on the PR: update it on later rounds (create it if absent). State the reviewed/resulting commit, key fixes, validation and limitations, remaining decisions or blockers, and what the next reviewer should inspect. Never include private samples or data.
+- When fixes are complete, the branch is current, and applicable local validation passes, mark a draft PR ready for the next review round and inspect its relevant checks. If blocked, leave it draft and explain the concrete blocker in the summary. Ready for review is not approval to merge.
+- Merge still requires HM's explicit "merge" for that PR. This rule does not authorize production database writes, deployments or settings changes outside the established PR workflow.
+
 ## Every chat, every action
 - Applies to every tool (Claude, ChatGPT, others) in every chat. The tracker changes only when a status, scope or priority changes, a decision is made, an open question is answered, or an item is added or dropped (tracker row, Decisions log if a decision, Change log line with the PR number). A PR being opened, pushed or merged is already recorded by GitHub and is not logged by itself; it shows up in the row of the item it affects.
 - **Never open a PR only to log another PR's merge, a check result, or a status change (HM, 2026-10-08).** Put the record in the next PR that has a real reason to exist: a feature PR updates the tracker rows it touches and logs the previous merge in the same PR. Until then say it in the reply ("merged; tracker update goes in the next PR"). A docs-only PR is for a real doc change, or when HM asks for one.
@@ -47,7 +55,7 @@ The same text is in both tools' project instructions.
 - After merging, verify only the applicable checks: the production Deployment check when something deployed, Database migrations when triggered, settings workflows when relevant.
 - No blind retries: diagnose a failure first, then retry only the targeted step or run once the cause is fixed, or when it is a diagnosed transient failure (no code change needed). No empty commits.
 - Commit package-lock.json with any package.json change. A version bump updates package.json and both corresponding "version" fields in package-lock.json by hand.
-- Never push to another session's branch or to Dependabot branches. Outside (fork) PRs never run workflows without HM's approval; never add `pull_request_target`.
+- Never push to another session's branch except under the PR review workflow above or HM's explicit authorization; never push to Dependabot branches. Outside (fork) PRs never run workflows without HM's approval; never add `pull_request_target`.
 - CI is one job. The database suites run only when `supabase/`, `scripts/db-test*` or `ci.yml` changed; run CI by hand (`workflow_dispatch`) for everything. Dependabot PRs are monthly and don't auto-rebase. "Lockfile repair" is manual.
 
 ## Refreshing a mirror
