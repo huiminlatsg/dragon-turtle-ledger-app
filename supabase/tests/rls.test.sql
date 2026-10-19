@@ -906,4 +906,51 @@ set local role anon;
 select pg_temp.expect_error('select * from public.expense_templates','anon cannot read templates');
 reset role;
 
+-- Recurrence: immutable future revisions, anchoring, atomic posting and tenant isolation.
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+select pg_temp.check(public.recurring_due('2024-01-31','monthly',1)='2024-02-29' and public.recurring_due('2024-01-31','monthly',2)='2024-03-31','month end returns to original anchor');
+select pg_temp.check(public.recurring_due('2024-02-29','yearly',1)='2025-02-28' and public.recurring_due('2024-02-29','yearly',4)='2028-02-29','yearly leap day returns in leap years');
+insert into ids select 'repeat_before',count(*)::text from public.transactions;
+insert into ids select 'repeat_first',public.save_recurring(null,null,null,'Mobile','monthly',(now() at time zone 'Asia/Singapore')::date,null,true,35.50,35.50,(select id from public.ledgers where is_default),(select id from public.categories where kind='expense' and name='超市'),null,'Mobile company','old notes')::text;
+select pg_temp.check((select count(*) from public.transactions)=(select v::integer from ids where k='repeat_before'),'plans do not affect transactions');
+select pg_temp.check((select count(*) from public.recurring_plan() p where p->>'name'='Mobile' and p->>'state'='planned')>=12,'open ended monthly preview');
+insert into ids select 'repeat_tx',public.confirm_recurring((select v::uuid from ids where k='repeat_first'),(now() at time zone 'Asia/Singapore')::date,false,40.25,null,'actual bill')::text;
+select pg_temp.check((select amount from public.transactions where id=(select v::uuid from ids where k='repeat_tx'))=40.25,'actual amount override recorded');
+select pg_temp.check((select notes from public.transactions where id=(select v::uuid from ids where k='repeat_tx'))='actual bill','actual notes override recorded');
+select pg_temp.check(public.confirm_recurring((select v::uuid from ids where k='repeat_first'),(now() at time zone 'Asia/Singapore')::date,false,99,null,'retry')=(select v::uuid from ids where k='repeat_tx'),'confirm retry returns the same record');
+select pg_temp.check((select count(*) from public.transactions)=(select v::integer+1 from ids where k='repeat_before'),'confirm retry never duplicates');
+insert into ids select 'repeat_second',public.save_recurring((select series_id from public.recurring_versions where id=(select v::uuid from ids where k='repeat_first')),(select v::uuid from ids where k='repeat_first'),(now() at time zone 'Asia/Singapore')::date+1,'Mobile','monthly',(now() at time zone 'Asia/Singapore')::date,null,true,50,50,(select id from public.ledgers where is_default),(select id from public.categories where kind='expense' and name='超市'),null,'New provider','new notes')::text;
+select pg_temp.check((select amount from public.recurring_versions where id=(select v::uuid from ids where k='repeat_first'))=35.50,'earlier revision remains unchanged');
+select pg_temp.check((select notes from public.transactions where id=(select v::uuid from ids where k='repeat_tx'))='actual bill','future revision never rewrites actual expense');
+select pg_temp.check((select bool_and((p->>'amount')::numeric=50 and p->>'notes'='new notes') from public.recurring_plan() p where p->>'name'='Mobile' and p->>'due_date'>((now() at time zone 'Asia/Singapore')::date)::text),'future planned bills use revised amount and notes');
+select pg_temp.expect_error($$select public.save_recurring((select series_id from public.recurring_versions where id=(select v::uuid from ids where k='repeat_first')),(select v::uuid from ids where k='repeat_first'),(now() at time zone 'Asia/Singapore')::date+1,'Stale','monthly',current_date,null,true,1,1,(select id from public.ledgers where is_default),(select id from public.categories where kind='expense' and name='超市'),null,'','')$$,'stale concurrent edit rejected');
+select pg_temp.expect_error($$select public.save_recurring((select series_id from public.recurring_versions where id=(select v::uuid from ids where k='repeat_first')),(select v::uuid from ids where k='repeat_second'),(now() at time zone 'Asia/Singapore')::date,'Past','monthly',current_date,null,true,1,1,(select id from public.ledgers where is_default),(select id from public.categories where kind='expense' and name='超市'),null,'','')$$,'past effective edits rejected');
+select pg_temp.expect_error($$update public.recurring_versions set amount=999$$,'revisions cannot be updated');
+select pg_temp.expect_error($$delete from public.recurring_versions$$,'revisions cannot be deleted');
+select pg_temp.expect_error($$select public.confirm_recurring((select v::uuid from ids where k='repeat_second'),(now() at time zone 'Asia/Singapore')::date+1)$$,'future or off-schedule confirmation rejected');
+insert into ids select 'repeat_yearly',public.save_recurring(null,null,null,'Insurance','yearly',(now() at time zone 'Asia/Singapore')::date,(now() at time zone 'Asia/Singapore')::date,true,800,800,(select id from public.ledgers where is_default),(select id from public.categories where kind='expense' and name='超市'),null,'Insurer','annual')::text;
+select pg_temp.check((select count(*) from public.recurring_plan() p where p->>'name'='Insurance')=1,'yearly end date is inclusive and prevents later occurrences');
+select public.confirm_recurring((select v::uuid from ids where k='repeat_yearly'),(now() at time zone 'Asia/Singapore')::date,true);
+select pg_temp.check((select count(*) from public.transactions)=(select v::integer+1 from ids where k='repeat_before'),'skip never posts spend');
+select public.confirm_recurring((select v::uuid from ids where k='repeat_yearly'),(now() at time zone 'Asia/Singapore')::date);
+select pg_temp.check((select count(*) from public.transactions)=(select v::integer+1 from ids where k='repeat_before'),'skipped bill cannot reappear on retry');
+-- Future stop revision preserves the past.
+select public.save_recurring((select series_id from public.recurring_versions where id=(select v::uuid from ids where k='repeat_first')),(select v::uuid from ids where k='repeat_second'),(now() at time zone 'Asia/Singapore')::date+1,'Mobile','monthly',(now() at time zone 'Asia/Singapore')::date,null,false,50,50,(select id from public.ledgers where is_default),(select id from public.categories where kind='expense' and name='超市'),null,'','');
+select pg_temp.check((select count(*) from public.recurring_plan() p where p->>'name'='Mobile' and p->>'state'='planned')=0,'future stop removes future planned bills');
+select pg_temp.check((select count(*) from public.recurring_plan() p where p->>'name'='Mobile' and p->>'state'='confirmed')=1,'future stop retains confirmed past bill');
+-- Other family and read-only viewer cannot write or call posting RPC.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000c","role":"authenticated"}', true);
+select pg_temp.check((select count(*) from public.recurring_versions)=0,'other family cannot read schedules');
+select pg_temp.check((select count(*) from public.recurring_plan())=0,'plan RPC respects tenant RLS');
+select pg_temp.expect_error($$select public.confirm_recurring((select v::uuid from ids where k='repeat_first'),current_date)$$,'other family cannot confirm');
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000d","role":"authenticated"}', true);
+select pg_temp.check((select count(*) from public.recurring_versions)>0,'viewer can see family plans');
+select pg_temp.expect_error($$select public.save_recurring(null,null,null,'Bad','monthly',current_date,null,true,1,1,(select id from public.ledgers where is_default),(select id from public.categories where kind='expense' and name='超市'),null,'','')$$,'viewer cannot create plans');
+select pg_temp.expect_error($$select public.confirm_recurring((select v::uuid from ids where k='repeat_first'),current_date)$$,'viewer cannot confirm');
+set local role anon;
+select pg_temp.expect_error('select * from public.recurring_versions','anon cannot read plans');
+select pg_temp.expect_error('select * from public.recurring_plan()','anon cannot execute plan RPC');
+reset role;
+
 rollback;
