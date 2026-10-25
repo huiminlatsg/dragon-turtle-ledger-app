@@ -69,19 +69,19 @@ describe("parseAccountForm", () => {
 
 describe("nickname", () => {
   it("is optional, trimmed, and at most 40 characters", () => {
-    const none = parseAccountForm({ type: "credit_card", name: "DBS yuu" });
+    const none = parseAccountForm({ type: "credit_card", name: "Bank Card A" });
     expect(none.ok && none.row.nickname).toBeNull();
-    const some = parseAccountForm({ type: "credit_card", name: "DBS yuu", nickname: "  DBS_Yuu " });
-    expect(some.ok && some.row.nickname).toBe("DBS_Yuu");
-    const blank = parseAccountForm({ type: "credit_card", name: "DBS yuu", nickname: "   " });
+    const some = parseAccountForm({ type: "credit_card", name: "Bank Card A", nickname: "  Cashback " });
+    expect(some.ok && some.row.nickname).toBe("Cashback");
+    const blank = parseAccountForm({ type: "credit_card", name: "Bank Card A", nickname: "   " });
     expect(blank.ok && blank.row.nickname).toBeNull();
-    expect(parseAccountForm({ type: "credit_card", name: "DBS yuu", nickname: "x".repeat(41) })).toEqual({ ok: false, errors: ["err.nickname"] });
+    expect(parseAccountForm({ type: "credit_card", name: "Bank Card A", nickname: "x".repeat(41) })).toEqual({ ok: false, errors: ["err.nickname"] });
   });
   it("is what lists show, with the official name as the fallback", () => {
-    expect(accountLabel({ name: "DBS yuu", nickname: "DBS_Yuu" })).toBe("DBS_Yuu");
-    expect(accountLabel({ name: "DBS yuu", nickname: null })).toBe("DBS yuu");
-    expect(accountLabel({ name: "DBS yuu", nickname: "  " })).toBe("DBS yuu");
-    expect(accountLabel({ name: "DBS yuu" })).toBe("DBS yuu");
+    expect(accountLabel({ name: "Bank Card A", nickname: "Cashback" })).toBe("Cashback");
+    expect(accountLabel({ name: "Bank Card A", nickname: null })).toBe("Bank Card A");
+    expect(accountLabel({ name: "Bank Card A", nickname: "  " })).toBe("Bank Card A");
+    expect(accountLabel({ name: "Bank Card A" })).toBe("Bank Card A");
   });
 });
 

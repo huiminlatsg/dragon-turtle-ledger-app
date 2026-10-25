@@ -1,6 +1,6 @@
 ## What and why
 
-<!-- One or two sentences. Link the issue: Closes #123 -->
+<!-- One or two sentences. Backlog item by ID only (e.g. B-10); planning detail stays in the private tracker. -->
 
 ## How to check it
 
@@ -10,3 +10,4 @@
 - [ ] CI is green
 - [ ] Database change? Migration added in `supabase/migrations/` and tests updated
 - [ ] CHANGELOG.md updated
+- [ ] No family details in code, tests, this PR text or commit messages (invented data only; privacy guard passes)

@@ -3,9 +3,14 @@
 Family expense tracker. Next.js on Vercel, Supabase Postgres, GitHub Actions. The code package name (`expensify`)
 and some IDs are unchanged from the project's earlier name.
 
-**This repo is public.** It holds the app code only. Family data, spending history, the backlog tracker and design
-docs live in the private repo `huiminlatsg/dragon-turtle-ledger` (its Actions are disabled). Never copy anything
-from there into this repo: `scripts/privacy-guard.py` fails any PR that does, and anything pushed here is public.
+**This repo is public and holds code only:** app code, migrations, tests with invented data, CI/deployment
+workflows and generic technical docs. The backlog, requirements, decisions, full designs, the shared collaboration
+policy (`pm/SYNC.md`) and all family data live in the private repo `huiminlatsg/dragon-turtle-ledger`, which is
+active and authoritative for them (HM, 2026-10-18). Read the private tracker there before planning or building.
+Never copy private content here: anything pushed here is public (files, PR text, comments, commit messages, run
+logs), and `scripts/privacy-guard.py` fails PRs with planning docs, data files, personal emails, Supabase project
+addresses or IDs, or private words. Refer to private material by ID only ("B-10", "private #n"); qualify PR
+numbers as `app #n` / `private #n`. Pipeline rules shared by both AI tools: `CONTRIBUTING.md`.
 
 **Data model in one line:** a family = a row in `households` (UI says "family"); every data row carries
 `household_id`; RLS confines each person to their own family. One family per person (`members.user_id` unique).
@@ -37,9 +42,17 @@ HM does not open GitHub, Supabase or Vercel for routine work. Claude runs the pi
    triggered, the settings workflow when relevant.
 8. **Releases**: bump the version in `package.json` and both corresponding `"version"` fields in
    `package-lock.json`, and CHANGELOG.md, in the feature PR itself.
-9. **Keep the tracker in sync**: the tracker is `pm/backlog-tracker.md` in the private repo, with its own rules and
-   `pm/SYNC.md`. A change in status, scope, priority or a decision is recorded there in the next docs PR that has a
-   real reason to exist, never in a PR opened only to log a merge, check or status (HM, 2026-10-08).
+9. **Keep the tracker in sync**: a change in status, scope, priority or a decision is recorded in the private
+   repo's `pm/backlog-tracker.md` (its own rules apply, and the private `pm/SYNC.md`) through a companion PR there
+   that has a real reason to exist, never in this repo and never in a PR opened only to log a merge, check or status
+   (HM, 2026-10-08). Refresh the Claude Project mirror after a merge only if a mirrored doc changed.
+
+## PR reviews
+
+A request to review a PR includes committing focused corrections to its existing branch, maintaining a summary
+comment, and marking it ready for the next review round after validation. This includes the other AI session's
+branch; explicit read-only requests, Dependabot/fork restrictions, feature freezes and production restrictions
+still apply. Follow `CONTRIBUTING.md`, "PR review workflow". Merge only on HM's explicit "merge" for that PR.
 
 ## GitHub Actions
 
@@ -64,7 +77,8 @@ check on production only. No blind retries: diagnose a failure first.
   `public.is_member()` / `public.can_write()`, `revoke all ... from anon`, and explicit grants to
   `authenticated` and `service_role`.
 - Add tests for new behaviour to `supabase/tests/rls.test.sql`; run `npm run test:db`. Test data is invented.
-- Loading accounts from JSON and backups are run from the private repo, never from here.
+- Loading accounts from JSON, backups and the history import are run from the private repo, never from here.
+  Public CI never downloads private repo contents or real family data.
 
 ## Service settings as code
 

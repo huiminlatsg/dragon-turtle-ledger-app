@@ -1,7 +1,7 @@
 # Data model
 
-How money is recorded and reported. The full design, with history and decisions, is kept in the owner's
-private project docs.
+How money is recorded and reported. The full design and its decisions are kept in the project's private repository
+(see `pm/README.md`); this page is the generic model developers need.
 
 ## Transactions
 

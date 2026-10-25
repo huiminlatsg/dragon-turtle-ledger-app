@@ -1,11 +1,11 @@
 import { expect, it } from "vitest";
 import { matchExpenseTemplate } from "@/lib/expense-templates";
-const templates = [{ id: "giant", merchant: "Giant", account_id: "yuu", category_id: null }, { id: "shell", merchant: "Shell Station", account_id: "citi", category_id: "fuel" }];
+const templates = [{ id: "market", merchant: "Corner Market", account_id: "card-a", category_id: null }, { id: "fuel", merchant: "Fuel Station", account_id: "card-b", category_id: "fuel" }];
 it("matches exact names ignoring case and whitespace", () => {
-  expect(matchExpenseTemplate(templates, "  GIANT ", new Set(["yuu"]))?.account_id).toBe("yuu");
-  expect(matchExpenseTemplate(templates, "shell   station", new Set(["citi"]))?.id).toBe("shell");
+  expect(matchExpenseTemplate(templates, "  CORNER   market ", new Set(["card-a"]))?.account_id).toBe("card-a");
+  expect(matchExpenseTemplate(templates, "fuel   station", new Set(["card-b"]))?.id).toBe("fuel");
 });
 it("does not partially match or select inactive accounts", () => {
-  for (const merchant of ["", "Giant Express", "Shell"]) expect(matchExpenseTemplate(templates, merchant, new Set(["yuu", "citi"]))).toBeUndefined();
-  expect(matchExpenseTemplate(templates, "Giant", new Set())).toBeUndefined();
+  for (const merchant of ["", "Corner Market Express", "Fuel"]) expect(matchExpenseTemplate(templates, merchant, new Set(["card-a", "card-b"]))).toBeUndefined();
+  expect(matchExpenseTemplate(templates, "Corner Market", new Set())).toBeUndefined();
 });

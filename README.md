@@ -11,20 +11,8 @@ Chinese and English UI; sign-in with Google.
 | Pipeline | GitHub Actions → Vercel previews (staging) → production |
 | Live | https://dragon-turtle-ledger.vercel.app (invite only) |
 
-This repo holds the app code only. Family data, history and project planning are kept privately.
-
-## Roadmap
-
-| Release | Phase | What |
-| --- | --- | --- |
-| v0.1 | 0 | Skeleton, database schema, CI/CD |
-| v0.2 | — | Several families, invite-only family creation, admin overview |
-| v0.5 | 1 | Sign-in, family + member invites, admin page, cards, manual entry, recurring bills |
-| v1.0 | 2 | Min-spend dashboard, reports, CSV export |
-| v1.1 | 3 | Apple Pay auto-capture (iOS Shortcuts) |
-| v1.2 | 4 | Bank email alert parsing |
-| v1.3 | 5 | Receipt reading, statement import, alerts, budgets |
-| v1.4 | 6 | Databricks analytics |
+This repo holds the app code, database migrations, tests, CI and generic technical docs. The backlog, requirements,
+designs and all family data are kept in a separate private repository ([why](pm/README.md)).
 
 ## Docs
 
@@ -33,6 +21,7 @@ This repo holds the app code only. Family data, history and project planning are
 - [How changes are made](CONTRIBUTING.md) — branches, tests, releases
 - [Runbook](docs/RUNBOOK.md) — rollback and recovery
 - [Changelog](CHANGELOG.md)
+- [Where the project docs are](pm/README.md)
 
 ## Layout
 
@@ -45,7 +34,7 @@ tests/unit/           unit tests (Vitest)
 tests/e2e/            end-to-end tests on an iPhone-sized screen (Playwright)
 tests/python/         tests for the CI helper scripts
 .github/workflows/    CI, migrations, settings, post-deploy checks, secret scan
-docs/                 setup guide and runbook
+docs/                 setup guide, data model and runbook
 ```
 
 ## Contributions and reuse
